@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { Round3SubmitSchema } from '@/lib/validation/schemas'
-import { canAccessRound, completeRound, logSubmissionAttempt, logIPAddress } from '@/lib/roundLogic'
+import { canAccessRound, completeRound, logSubmissionAttempt, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
 
 export async function POST(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown'
@@ -45,10 +45,14 @@ export async function POST(req: NextRequest) {
         const passed = selected_option === problem.correct_option
         if (passed) await completeRound(user.id, 3)
 
+        const resultMessage = passed ? '✓ Correct circuit! Round 3 complete.' : '✗ That\'s not the right circuit. Try again!'
+
+        await logAuditSubmission(user.id, 3, `Selected option ${selected_option} for ${problem.title}. Passed: ${passed}`, ip)
+
         return NextResponse.json({
             passed,
             explanation: passed ? problem.explanation : null,
-            message: passed ? '✓ Correct circuit! Round 3 complete.' : '✗ That\'s not the right circuit. Try again!',
+            message: resultMessage,
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

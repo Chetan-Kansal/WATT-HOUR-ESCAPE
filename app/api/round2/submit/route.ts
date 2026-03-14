@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { Round2SubmitSchema } from '@/lib/validation/schemas'
-import { canAccessRound, completeRound, logSubmissionAttempt, logIPAddress } from '@/lib/roundLogic'
+import { canAccessRound, completeRound, logSubmissionAttempt, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
 
 // Judge0 language → ID mapping
 const LANGUAGE_IDS: Record<string, number> = {
     python: 71,
     javascript: 63,
-    cpp: 54,
     java: 62,
+    cpp: 54,
+    c: 50,
 }
 
 interface Judge0Result {
@@ -20,7 +21,7 @@ interface Judge0Result {
     compile_output: string | null
 }
 
-async function runOnJudge0(code: string, languageId: number): Promise<Judge0Result> {
+async function runOnJudge0(code: string, languageId: number, stdin: string): Promise<Judge0Result> {
     const JUDGE0_BASE = process.env.JUDGE0_BASE_URL ?? 'https://judge0-ce.p.rapidapi.com'
     const API_KEY = process.env.JUDGE0_API_KEY!
 
@@ -35,6 +36,7 @@ async function runOnJudge0(code: string, languageId: number): Promise<Judge0Resu
         body: JSON.stringify({
             source_code: code,
             language_id: languageId,
+            stdin: stdin,
             cpu_time_limit: 5,           // 5 second limit
             memory_limit: 128000,        // 128MB limit
             max_processes_and_or_threads: 10,
@@ -60,6 +62,11 @@ async function runOnJudge0(code: string, languageId: number): Promise<Judge0Resu
     throw new Error('Execution timed out')
 }
 
+function normalizeOutput(str: string | null): string {
+    if (!str) return ''
+    return str.replace(/\r\n/g, '\n').trim()
+}
+
 export async function POST(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown'
 
@@ -71,13 +78,14 @@ export async function POST(req: NextRequest) {
         const canAccess = await canAccessRound(user.id, 2)
         if (!canAccess) return NextResponse.json({ error: 'Round 1 not completed' }, { status: 403 })
 
-        // Rate limiting — max 10 attempts for Round 2
-        const { count, blocked } = await logSubmissionAttempt(user.id, 2)
+        // Rate limiting
+        const { count, blocked, reason } = await logSubmissionAttempt(user.id, 2)
         if (blocked) {
-            return NextResponse.json(
-                { error: 'Maximum attempts reached. Wait 1 minute.' },
-                { status: 429 }
-            )
+            if (reason === 'limit') {
+                return NextResponse.json( { error: 'SUBMISSION LIMIT REACHED' }, { status: 429 } )
+            } else {
+                return NextResponse.json( { error: 'Please wait 10 seconds between submissions.' }, { status: 429 } )
+            }
         }
 
         await logIPAddress(user.id, ip, '/api/round2/submit')
@@ -89,19 +97,23 @@ export async function POST(req: NextRequest) {
         }
 
         const { problem_id, code, language } = parsed.data
+        const languageId = LANGUAGE_IDS[language.toLowerCase()]
+        if (!languageId) {
+            return NextResponse.json({ error: 'Unsupported language' }, { status: 400 })
+        }
+
         const admin = createSupabaseAdmin()
 
-        // Get expected output (server-only)
+        // Get expected test cases
         const { data: problem } = await admin
             .from('debug_problems')
-            .select('expected_output, judge0_language_id, title')
+            .select('title, test_cases')
             .eq('id', problem_id)
             .eq('is_active', true)
             .single()
 
         if (!problem) return NextResponse.json({ error: 'Problem not found' }, { status: 404 })
 
-        // Check already completed
         const { data: progress } = await admin
             .from('progress')
             .select('round2_completed')
@@ -112,39 +124,67 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Round 2 already completed' }, { status: 400 })
         }
 
-        const languageId = LANGUAGE_IDS[language] ?? problem.judge0_language_id
-
-        let result: Judge0Result
-        try {
-            result = await runOnJudge0(code, languageId)
-        } catch (e) {
-            return NextResponse.json({
-                error: 'Code execution service unavailable',
-                details: String(e),
-            }, { status: 503 })
+        const testCases: { input: string; output: string }[] = problem.test_cases || []
+        
+        if (testCases.length === 0) {
+            return NextResponse.json({ error: 'No test cases configured for this problem' }, { status: 500 })
         }
 
-        const stdout = (result.stdout ?? '').trim()
-        const expected = problem.expected_output.trim()
-        const passed = stdout === expected
+        let passedAll = true
+        const resultsArray = []
+        let totalTime = 0
+        let maxMemory = 0
 
-        if (passed) {
+        // Evaluate all test cases
+        for (let i = 0; i < testCases.length; i++) {
+            const tc = testCases[i]
+            
+            try {
+                // Execute their submitted code text with STDIN
+                const result = await runOnJudge0(code, languageId, tc.input)
+                totalTime += parseFloat(result.time || '0')
+                maxMemory = Math.max(maxMemory, result.memory || 0)
+
+                const stdout = normalizeOutput(result.stdout)
+                const expected = normalizeOutput(tc.output)
+
+                const passed = result.status.id <= 3 && stdout === expected
+                
+                resultsArray.push({
+                    test_num: i + 1,
+                    passed,
+                    expected,
+                    received: stdout,
+                    compile_output: result.compile_output,
+                    stderr: result.stderr,
+                    status_desc: result.status.description
+                })
+
+                if (!passed) {
+                    passedAll = false
+                }
+            } catch (e: any) {
+                return NextResponse.json({
+                    error: 'Execution service temporarily unavailable',
+                    details: String(e),
+                }, { status: 503 })
+            }
+        }
+
+        if (passedAll) {
             await completeRound(user.id, 2)
         }
 
+        await logAuditSubmission(user.id, 2, `Ran code for ${problem.title}. Language: ${language}. Passed: ${passedAll}`, ip)
+
         return NextResponse.json({
-            passed,
-            status: result.status.description,
-            stdout: stdout,
-            stderr: result.stderr ?? null,
-            compile_output: result.compile_output ?? null,
-            execution_time: result.time,
-            memory_kb: result.memory,
+            passed: passedAll,
+            results: resultsArray,
+            execution_time: totalTime.toFixed(3),
+            memory_kb: maxMemory,
             attempt: count,
-            max_attempts: 10,
-            message: passed
-                ? '✓ Output matches! Round 2 complete.'
-                : `✗ Output does not match expected output.`,
+            max_attempts: 15, // Updated limit representation
+            message: passedAll ? 'CODE VERIFIED\nENGINEERING SKILL CONFIRMED' : 'TEST FAILED',
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

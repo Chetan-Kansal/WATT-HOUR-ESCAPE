@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { Timer } from 'lucide-react'
-import { formatTime } from '@/lib/timer'
+import { formatTime } from '@/lib/timer/client'
 
 interface ServerTimerProps {
     initialElapsed: number

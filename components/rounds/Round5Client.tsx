@@ -3,205 +3,276 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { Play, Pause, Send, Trophy, Loader2, Radio, Volume2 } from 'lucide-react'
-import { toast } from 'sonner'
 import confetti from 'canvas-confetti'
-import { formatTime } from '@/lib/timer'
+import { Play, Pause, AlertTriangle, KeyRound, CheckCircle2, Trophy, Loader2, Disc, Radio, Terminal, Cpu } from 'lucide-react'
+import { toast } from 'sonner'
 
-interface AudioClip { id: string; audio_url: string; morse_code: string; number: number }
+interface AudioFile { id: string; url: string; sequence: number }
+interface Problem { id: string; audio_files: AudioFile[] }
+interface SubmitResult { passed: boolean; completed_at: string; rank: number; message: string; points: number }
 
 export default function Round5Client() {
     const router = useRouter()
-    const [clips, setClips] = useState<AudioClip[]>([])
+    const [problem, setProblem] = useState<Problem | null>(null)
+    const [answer, setAnswer] = useState('')
     const [loading, setLoading] = useState(true)
-    const [playing, setPlaying] = useState<string | null>(null)
-    const [finalKey, setFinalKey] = useState('')
     const [submitting, setSubmitting] = useState(false)
-    const [completed, setCompleted] = useState<{ total_time: number; final_rank: number | null } | null>(null)
-    const audioRefs = useRef<Record<string, HTMLAudioElement>>({})
+    const [result, setResult] = useState<SubmitResult | null>(null)
+    const [playing, setPlaying] = useState<string | null>(null)
+    const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({})
+    const [terminalText, setTerminalText] = useState<string[]>([])
+
+    // Fake terminal boot sequence
+    useEffect(() => {
+        if (!loading) {
+            const sequence = [
+                "ESTABLISHING SECURE CONNECTION...",
+                "HANDSHAKE PROTOCOL: ACCEPTED",
+                "INTERCEPTING ENCRYPTED TRANSMISSIONS...",
+                "WARNING: SIGNAL DEGRADATION DETECTED",
+                "AWAITING MANUAL DECRYPTION KEY INPUT."
+            ]
+            let i = 0;
+            const interval = setInterval(() => {
+                if (i < sequence.length) {
+                    setTerminalText(prev => [...prev, sequence[i]])
+                    i++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 400);
+            return () => clearInterval(interval);
+        }
+    }, [loading]);
 
     useEffect(() => {
-        fetch('/api/round5/audio', { cache: 'no-store' })
+        fetch('/api/round5/problem', { cache: 'no-store' })
             .then(r => r.json())
-            .then(data => setClips(data.clips ?? []))
-            .catch(() => toast.error('Failed to load audio clips'))
+            .then(data => setProblem(data))
+            .catch(() => toast.error('Failed to load transmission'))
             .finally(() => setLoading(false))
+
+        return () => {
+            Object.values(audioRefs.current).forEach(a => { a.pause(); a.src = '' })
+        }
     }, [])
 
-    const togglePlay = (clip: AudioClip) => {
-        // Stop all others
-        Object.entries(audioRefs.current).forEach(([id, el]) => {
-            if (id !== clip.id) { el.pause(); el.currentTime = 0 }
-        })
-
-        if (!audioRefs.current[clip.id]) {
-            audioRefs.current[clip.id] = new Audio(clip.audio_url)
-            audioRefs.current[clip.id].onended = () => setPlaying(null)
+    const togglePlay = (id: string, url: string) => {
+        if (playing && playing !== id && audioRefs.current[playing]) {
+            audioRefs.current[playing].pause()
+            audioRefs.current[playing].currentTime = 0
         }
-
-        const audio = audioRefs.current[clip.id]
-        if (playing === clip.id) {
-            audio.pause()
-            setPlaying(null)
-        } else {
-            audio.play().catch(() => toast.error('Could not play audio'))
-            setPlaying(clip.id)
+        if (!audioRefs.current[id]) {
+            const a = new Audio(url)
+            a.onended = () => setPlaying(null)
+            audioRefs.current[id] = a
         }
+        const audio = audioRefs.current[id]
+        if (playing === id) { audio.pause(); setPlaying(null) }
+        else { audio.play().then(() => setPlaying(id)).catch(() => toast.error('Playback failed')) }
     }
 
-    const handleSubmit = async () => {
-        if (!finalKey.trim() || submitting) return
+    const fireConfetti = () => {
+        const duration = 3 * 1000
+        const end = Date.now() + duration
+        const frame = () => {
+            confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#00ff00', '#0000ff'] })
+            confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff0000', '#00ff00', '#0000ff'] })
+            if (Date.now() < end) requestAnimationFrame(frame)
+        }
+        frame()
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!problem || !answer.trim() || submitting || result) return
+        
         setSubmitting(true)
-        try {
-            const res = await fetch('/api/round5/submit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: finalKey }),
-            })
-            const data = await res.json()
-            if (!res.ok) { toast.error(data.error); return }
-
-            if (data.passed) {
-                // 🎉 Confetti!
-                confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 }, colors: ['#4285F4', '#34A853', '#FBBC05', '#EA4335'] })
-                setTimeout(() => confetti({ particleCount: 80, spread: 120, origin: { y: 0.5 } }), 500)
-                setCompleted({ total_time: data.total_time, final_rank: data.final_rank })
-                toast.success(data.message)
-            } else {
-                toast.error(data.message)
+        
+        // Simulating decryption delay for effect
+        setTerminalText(prev => [...prev, "> DECRYPT(KEY: '" + answer.toUpperCase() + "')"])
+        setTerminalText(prev => [...prev, "EXECUTING DECRYPTION ALGORITHM..."])
+        
+        setTimeout(async () => {
+            try {
+                const res = await fetch('/api/round5/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ problem_id: problem.id, answer: answer.trim().toUpperCase() }),
+                })
+                const data = await res.json()
+                if (!res.ok) { 
+                    setTerminalText(prev => [...prev, "ERROR: INVALID KEY. DECRYPTION FAILED."])
+                    toast.error(data.error || 'Decryption failed')
+                    setSubmitting(false)
+                    return 
+                }
+                
+                setResult(data)
+                if (data.passed) {
+                    setTerminalText(prev => [...prev, "SUCCESS: PAYLOAD DECRYPTED."])
+                    fireConfetti()
+                    toast.success('System breached! Competition complete!')
+                } else {
+                    setTerminalText(prev => [...prev, "ACCESS DENIED: INCORRECT KEY."])
+                    toast.error('Incorrect key.')
+                }
+            } catch { 
+                toast.error('Signal lost. Try again.') 
+                setTerminalText(prev => [...prev, "FATAL: SIGNAL CONNECTION LOST."])
             }
-        } catch { toast.error('Submission failed') }
-        finally { setSubmitting(false) }
+            finally { setSubmitting(false) }
+        }, 1500) // 1.5s fake delay
     }
 
-    // Completion Screen
-    if (completed) {
-        return (
-            <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="max-w-lg mx-auto text-center space-y-8 py-12"
-            >
-                <motion.div
-                    animate={{ rotate: [0, -10, 10, -10, 10, 0] }}
-                    transition={{ duration: 0.6 }}
-                    className="text-8xl"
-                >🏆</motion.div>
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <Loader2 size={32} className="animate-spin text-green-500" />
+            <span className="text-xs font-mono text-green-500 tracking-widest uppercase">Intercepting Signals...</span>
+        </div>
+    )
 
-                <div className="space-y-2">
-                    <h2 className="text-3xl font-bold gradient-text-gold">Mission Complete!</h2>
-                    <p className="text-muted-foreground">You've conquered all 5 rounds of TechChallenge 2026</p>
-                </div>
-
-                <div className="glass-card rounded-2xl p-6 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Time</p>
-                            <p className="text-2xl font-mono font-bold text-foreground">{formatTime(completed.total_time)}</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Your Rank</p>
-                            <p className={`text-2xl font-bold ${completed.final_rank === 1 ? 'gradient-text-gold' : 'text-foreground'}`}>
-                                #{completed.final_rank ?? '—'}
-                            </p>
-                        </div>
+    if (result?.passed) return (
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-2xl mx-auto text-center space-y-8">
+            <div className="glass-card rounded-2xl p-12 border border-green-500/30 bg-[#0a0f0a] relative overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.1)]">
+                {/* Matrix rain effect background overlay */}
+                <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, #22c55e 2px, #22c55e 4px)', backgroundSize: '100% 4px' }} />
+                
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 15 }} className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-green-500/50 relative z-10 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
+                    <Trophy size={48} className="text-green-400" />
+                </motion.div>
+                
+                <h2 className="text-4xl font-extrabold text-white mb-2 tracking-tight relative z-10 font-mono">MISSION ACCOMPLISHED</h2>
+                <p className="text-green-400 text-lg mb-8 font-mono relative z-10 uppercase tracking-widest shadow-green-500/50 drop-shadow-md">System Override Successful</p>
+                
+                <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto relative z-10">
+                    <div className="bg-black/50 border border-green-500/30 rounded-xl p-4 transform transition-all hover:scale-105">
+                        <p className="text-[10px] text-green-500/70 font-mono uppercase tracking-widest mb-1">Rank Achieved</p>
+                        <p className="text-3xl font-bold font-mono text-white">#{result.rank}</p>
+                    </div>
+                    <div className="bg-black/50 border border-green-500/30 rounded-xl p-4 transform transition-all hover:scale-105">
+                        <p className="text-[10px] text-green-500/70 font-mono uppercase tracking-widest mb-1">Points Secured</p>
+                        <p className="text-3xl font-bold font-mono text-white">{result.points}</p>
                     </div>
                 </div>
-
-                <div className="flex gap-3 justify-center">
-                    <button
-                        onClick={() => router.push('/leaderboard')}
-                        className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 transition-all flex items-center gap-2"
-                    >
-                        <Trophy size={18} /> View Leaderboard
-                    </button>
-                    <button
-                        onClick={() => router.push('/dashboard')}
-                        className="px-6 py-3 glass border border-border rounded-xl font-medium hover:border-primary/50 transition-all"
-                    >
-                        Dashboard
-                    </button>
-                </div>
-            </motion.div>
-        )
-    }
-
-    if (loading) return <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-primary" /></div>
+            </div>
+            
+            <button onClick={() => router.push('/dashboard')} className="px-8 py-3 bg-green-600/20 border border-green-500/50 text-green-400 rounded-lg hover:bg-green-600/30 transition-all font-mono uppercase tracking-widest text-sm shadow-[0_0_15px_rgba(34,197,94,0.2)]">
+                Return to Base
+            </button>
+        </motion.div>
+    )
 
     return (
-        <div className="max-w-3xl mx-auto space-y-8">
-            <div className="glass-card rounded-2xl p-5">
-                <p className="text-sm text-muted-foreground flex items-start gap-2">
-                    <Radio size={16} className="text-primary mt-0.5 flex-shrink-0" />
-                    Decode all 12 Morse code audio clips. Each represents a word. Only one word is the correct final key. Submit it below.
-                </p>
+        <div className="max-w-2xl mx-auto space-y-6">
+            {/* Terminal Header */}
+            <div className="glass-card rounded-t-xl rounded-b-sm border border-green-500/20 bg-[#050505] p-2 flex items-center justify-between border-b-green-500/50">
+                <div className="flex gap-1.5 ml-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500/50" />
+                    <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
+                    <div className="w-3 h-3 rounded-full bg-green-500/80 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse" />
+                </div>
+                <div className="flex items-center gap-2 mr-2 opacity-70">
+                    <Terminal size={14} className="text-green-500" />
+                    <span className="text-[10px] font-mono text-green-500 tracking-widest">G_JAM_DECRYPTOR_V9.2</span>
+                </div>
             </div>
 
-            {/* Audio Clips */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {clips.map(clip => (
+            {/* Terminal Console Output */}
+            <div className="glass-card rounded-sm border border-green-500/20 bg-[#0a0a0a] p-5 h-48 overflow-y-auto font-mono text-[11px] leading-relaxed relative flex flex-col justify-end">
+                {/* Subtle scanline overlay */}
+                <div className="absolute inset-0 pointer-events-none opacity-10" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, #22c55e 2px, #22c55e 4px)', backgroundSize: '100% 4px' }} />
+                
+                <div className="space-y-1 relative z-10 w-full">
+                    {terminalText.map((text, i) => (
+                        <motion.div key={i} initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className={text.includes('ERROR') || text.includes('FATAL') || text.includes('DENIED') ? 'text-red-500' : text.includes('SUCCESS') ? 'text-green-400 font-bold' : text.startsWith('>') ? 'text-white' : 'text-green-500/70'}>
+                            {text}
+                        </motion.div>
+                    ))}
+                    {submitting && (
+                        <motion.div animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="text-green-500/70">
+                            _
+                        </motion.div>
+                    )}
+                </div>
+            </div>
+
+            <div className="grid gap-4">
+                {problem?.audio_files.map((file, index) => (
                     <motion.div
-                        key={clip.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`glass rounded-xl p-4 flex items-center gap-4 cursor-pointer hover:border-primary/40 transition-all border
-              ${playing === clip.id ? 'border-primary bg-primary/5' : 'border-border'}
-            `}
-                        onClick={() => togglePlay(clip)}
+                        transition={{ delay: index * 0.1 }}
+                        key={file.id} 
+                        className={`glass-card p-4 rounded-sm border flex items-center justify-between group transition-colors font-mono
+                            ${playing === file.id ? 'border-green-500/50 bg-[#0a150a] shadow-[inset_0_0_20px_rgba(34,197,94,0.05)]' : 'border-green-500/10 bg-[#0a0a0a] hover:border-green-500/30'}
+                        `}
                     >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all
-              ${playing === clip.id ? 'bg-primary text-primary-foreground' : 'bg-muted'}
-            `}>
-                            {playing === clip.id ? <Pause size={18} /> : <Play size={18} />}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-foreground">Clip #{clip.number}</p>
-                            <p className="text-xs font-mono text-muted-foreground truncate">{clip.morse_code}</p>
-                        </div>
-
-                        {/* Waveform animation when playing */}
-                        {playing === clip.id && (
-                            <div className="flex items-end gap-0.5 h-6">
-                                {[...Array(5)].map((_, i) => (
-                                    <motion.div
-                                        key={i}
-                                        animate={{ scaleY: [0.4, 1.2, 0.4] }}
-                                        transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.1 }}
-                                        className="w-1 bg-primary rounded-full h-full origin-bottom"
-                                    />
-                                ))}
+                        <div className="flex items-center gap-4">
+                            <span className="text-2xl font-black text-green-500/20 italic tracking-tighter w-8 text-center bg-green-500/5 rounded p-1 border border-green-500/10">0{file.sequence}</span>
+                            <div>
+                                <h3 className={`font-bold tracking-widest uppercase text-xs ${playing === file.id ? 'text-green-400' : 'text-green-500/70'}`}>
+                                    SIG_INT_{file.id.substring(0, 4)}
+                                </h3>
+                                <div className="flex items-center gap-2 mt-1 opacity-60">
+                                    <Radio size={10} className={playing === file.id ? 'text-green-400 animate-pulse' : 'text-green-500/50'} />
+                                    <span className="text-[9px] text-green-500/50 uppercase tracking-widest">{playing === file.id ? 'Transmitting Data...' : 'Encrypted Signal Ready'}</span>
+                                </div>
                             </div>
-                        )}
+                        </div>
+                        
+                        {/* Audio Waveform visualization (fake) */}
+                        <div className="hidden sm:flex items-center gap-0.5 h-6 mx-4 flex-1 justify-center opacity-30">
+                            {[...Array(15)].map((_, i) => (
+                                <motion.div 
+                                    key={i}
+                                    animate={playing === file.id ? { height: ['20%', '100%', '30%', '80%', '10%'] } : { height: '10%' }}
+                                    transition={{ duration: 0.5 + Math.random(), repeat: Infinity, repeatType: 'mirror' }}
+                                    className="w-1 bg-green-500/50 rounded-full"
+                                />
+                            ))}
+                        </div>
 
-                        {playing !== clip.id && <Volume2 size={16} className="text-muted-foreground flex-shrink-0" />}
+                        <button
+                            onClick={() => togglePlay(file.id, file.url)}
+                            className={`w-10 h-10 rounded-sm flex items-center justify-center transition-all flex-shrink-0 border 
+                                ${playing === file.id 
+                                    ? 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.3)]' 
+                                    : 'bg-[#111] text-green-500/50 border-green-500/20 hover:bg-[#1a1a1a] hover:text-green-400'}
+                            `}
+                        >
+                            {playing === file.id ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" className="ml-1" />}
+                        </button>
                     </motion.div>
                 ))}
             </div>
 
-            {/* Final Key Submission */}
-            <div className="glass-card rounded-2xl p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                    <Send size={14} className="text-primary" /> Submit Final Key
-                </h3>
-                <p className="text-xs text-muted-foreground">Enter the single word that is the correct final key (case-insensitive)</p>
-                <div className="flex gap-3">
-                    <input
-                        value={finalKey}
-                        onChange={e => setFinalKey(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                        placeholder="Type the final key word..."
-                        className="flex-1 px-4 py-3 rounded-xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-mono"
-                    />
-                    <button
-                        onClick={handleSubmit}
-                        disabled={!finalKey.trim() || submitting}
-                        className="px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-glow-blue"
-                    >
-                        {submitting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                    </button>
+            <form onSubmit={handleSubmit} className="relative mt-8 group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <span className="text-green-500/70 font-mono text-sm">{'>'}</span>
                 </div>
-            </div>
+                <input
+                    type="text"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value.toUpperCase())}
+                    placeholder="ENTER DECRYPTION KEY..."
+                    className="w-full pl-10 pr-32 py-4 bg-[#0a0a0a] border border-green-500/30 rounded-sm text-green-400 placeholder:text-green-500/30 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-all font-mono uppercase tracking-widest text-sm shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]"
+                    required
+                    disabled={submitting}
+                />
+                
+                {answer && !submitting && (
+                    <div className="absolute right-32 top-1/2 -translate-y-1/2 w-2 h-4 bg-green-500 animate-pulse pointer-events-none" />
+                )}
+
+                <button
+                    type="submit"
+                    disabled={!answer.trim() || submitting}
+                    className="absolute right-2 top-2 bottom-2 px-6 bg-green-600/20 text-green-500 rounded-sm font-bold font-mono text-xs tracking-widest hover:bg-green-600/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 border border-green-500/30 uppercase"
+                >
+                    {submitting ? 'DECRYPTING...' : 'EXECUTE'}
+                </button>
+            </form>
         </div>
     )
 }

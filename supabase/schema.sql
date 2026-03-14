@@ -138,6 +138,20 @@ CREATE TABLE IF NOT EXISTS submission_log (
 CREATE INDEX idx_submission_log_team ON submission_log(team_id, round);
 
 -- ============================================================
+-- SUBMISSION AUDITS (Individual submisssion record)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS submission_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  round INT NOT NULL,
+  result TEXT,
+  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ip TEXT
+);
+
+CREATE INDEX idx_submission_logs_team ON submission_logs(team_id, round);
+
+-- ============================================================
 -- IP LOG (Anti-cheat audit)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ip_log (
@@ -181,6 +195,7 @@ ORDER BY rank;
 ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE submission_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE submission_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quiz_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE debug_problems ENABLE ROW LEVEL SECURITY;
 ALTER TABLE circuit_problems ENABLE ROW LEVEL SECURITY;

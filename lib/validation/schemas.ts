@@ -22,7 +22,7 @@ export const Round1SubmitSchema = z.object({
 export const Round2SubmitSchema = z.object({
     problem_id: z.string().uuid(),
     code: z.string().min(1, 'Code cannot be empty').max(10000, 'Code too long'),
-    language: z.enum(['python', 'javascript', 'cpp', 'java']).default('python'),
+    language: z.enum(['python', 'javascript', 'cpp', 'java', 'c']).default('python'),
 })
 
 // ── Round 3 ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { Round5SubmitSchema } from '@/lib/validation/schemas'
-import { canAccessRound, logSubmissionAttempt, logIPAddress } from '@/lib/roundLogic'
+import { canAccessRound, logSubmissionAttempt, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
 import { finalizeTeamTimer } from '@/lib/timer'
 
 export async function POST(req: NextRequest) {
@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
         const isCorrect = key.toUpperCase() === finalKey.word.toUpperCase()
 
         if (!isCorrect) {
+            await logAuditSubmission(user.id, 5, `Submitted final key: ${key}. Passed: false`, ip)
             return NextResponse.json({
                 passed: false,
                 message: '✗ That\'s not the correct key. Decode the audio clips more carefully.',
@@ -88,6 +89,8 @@ export async function POST(req: NextRequest) {
             .single()
 
         const finalRank = (leaderboard as { rank?: number } | null)?.rank ?? null
+
+        await logAuditSubmission(user.id, 5, `Submitted final key: ${key}. Passed: true`, ip)
 
         return NextResponse.json({
             passed: true,

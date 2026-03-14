@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
-import { canAccessRound, completeRound, logIPAddress } from '@/lib/roundLogic'
+import { canAccessRound, completeRound, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
 
 export async function POST(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown'
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         // Get active image with reference URL (never expose prompt)
         const { data: imageRound } = await admin
             .from('image_round')
-            .select('id, image_url, similarity_threshold')
+            .select('id, image_url, similarity_threshold, title')
             .eq('id', imageId)
             .eq('is_active', true)
             .single()
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
         if (!PYTHON_URL) {
             // Fallback for development: auto-pass at 0.7 similarity
             const mockScore = 0.72
+            await logAuditSubmission(user.id, 4, `Dev Mode Mock Submission. Score: ${mockScore}`, ip)
             return NextResponse.json({
                 similarity_score: mockScore,
                 threshold: imageRound.similarity_threshold,
@@ -74,17 +75,25 @@ export async function POST(req: NextRequest) {
 
         let clipResult: { similarity: number }
         try {
+            // Use AbortController for broader compatibility in case AbortSignal.timeout isn't fully supported in all node environments natively
+            const controller = new AbortController()
+            const id = setTimeout(() => controller.abort(), 15000) // 15s max waiting time to prevent UI hang
+
             const clipRes = await fetch(`${PYTHON_URL}/compare`, {
                 method: 'POST',
                 body: clipFormData,
-                signal: AbortSignal.timeout(30000), // 30s timeout
+                signal: controller.signal,
             })
+            clearTimeout(id)
 
             if (!clipRes.ok) throw new Error(`CLIP service error: ${clipRes.status}`)
             clipResult = await clipRes.json()
-        } catch (e) {
+        } catch (e: any) {
+            await logAuditSubmission(user.id, 4, `Failed similarity check (Service Error: ${e.name})`, ip)
             return NextResponse.json({
-                error: 'Image comparison service unavailable. Please try again.',
+                error: e.name === 'AbortError' 
+                    ? 'Image comparison service timed out. Please try again.' 
+                    : 'Image comparison service unavailable.',
                 details: String(e),
             }, { status: 503 })
         }
@@ -94,13 +103,17 @@ export async function POST(req: NextRequest) {
 
         if (passed) await completeRound(user.id, 4)
 
+        const resultMessage = passed
+            ? '✓ Image similarity passes! Round 4 complete.'
+            : `✗ Similarity: ${Math.round(similarityScore * 100)}%. Need ${Math.round(imageRound.similarity_threshold * 100)}%. Try a more similar image.`
+
+        await logAuditSubmission(user.id, 4, `Image Upload for ${imageRound.title}. Score: ${Math.round(similarityScore * 100)}%. Passed: ${passed}`, ip)
+
         return NextResponse.json({
             similarity_score: similarityScore,
             threshold: imageRound.similarity_threshold,
             passed,
-            message: passed
-                ? '✓ Image similarity passes! Round 4 complete.'
-                : `✗ Similarity: ${Math.round(similarityScore * 100)}%. Need ${Math.round(imageRound.similarity_threshold * 100)}%. Try a more similar image.`,
+            message: resultMessage,
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

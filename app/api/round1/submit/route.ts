@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { Round1SubmitSchema } from '@/lib/validation/schemas'
-import { canAccessRound, completeRound, logSubmissionAttempt, logIPAddress } from '@/lib/roundLogic'
+import { canAccessRound, completeRound, logSubmissionAttempt, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
 
 export async function POST(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown'
@@ -77,15 +77,19 @@ export async function POST(req: NextRequest) {
             completed = true
         }
 
+        const resultMessage = isCorrect
+            ? newStreak >= 5
+                ? '🎉 Round complete! Streak of 5 achieved!'
+                : `✓ Correct! Streak: ${newStreak}/5`
+            : '✗ Wrong answer. Streak reset.'
+
+        await logAuditSubmission(user.id, 1, `Answered ${answer} (QID: ${question_id}): ${isCorrect ? 'Correct' : 'Incorrect'}`, ip)
+
         return NextResponse.json({
             correct: isCorrect,
             streak: newStreak,
             completed,
-            message: isCorrect
-                ? newStreak >= 5
-                    ? '🎉 Round complete! Streak of 5 achieved!'
-                    : `✓ Correct! Streak: ${newStreak}/5`
-                : '✗ Wrong answer. Streak reset.',
+            message: resultMessage,
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

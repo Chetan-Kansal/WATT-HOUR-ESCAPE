@@ -51,7 +51,7 @@ export async function completeRound(teamId: string, round: number): Promise<void
 export async function logSubmissionAttempt(
     teamId: string,
     round: number
-): Promise<{ count: number; blocked: boolean }> {
+): Promise<{ count: number; blocked: boolean; reason?: 'cooldown' | 'limit' }> {
     const admin = createSupabaseAdmin()
 
     const { data: existing } = await admin
@@ -61,27 +61,22 @@ export async function logSubmissionAttempt(
         .eq('round', round)
         .single()
 
-    const MAX_ATTEMPTS = round === 2 ? 10 : 20
-    const COOLDOWN_MINUTES = 1
+    const MAX_ATTEMPTS = round === 2 ? 15 : 20
+    const COOLDOWN_SECONDS = 10
+    const RESET_MINUTES = 60 // Usually we might reset after some time, let's just make it never reset or reset if they wait long enough. They asked for max 15 submissions.
+    // Actually the user requirements say: "Maximum 15 submissions". It doesn't say it resets. So we can just enforce the limit strictly.
 
     if (existing) {
         const lastAttempt = new Date(existing.last_attempt_at)
-        const minutesSinceLastAttempt =
-            (Date.now() - lastAttempt.getTime()) / 1000 / 60
+        const secondsSinceLastAttempt = (Date.now() - lastAttempt.getTime()) / 1000
 
-        // Reset counter after cooldown
-        if (minutesSinceLastAttempt > COOLDOWN_MINUTES) {
-            await admin
-                .from('submission_log')
-                .update({ attempt_count: 1, last_attempt_at: new Date().toISOString() })
-                .eq('team_id', teamId)
-                .eq('round', round)
-            return { count: 1, blocked: false }
+        if (secondsSinceLastAttempt < COOLDOWN_SECONDS) {
+            return { count: existing.attempt_count, blocked: true, reason: 'cooldown' }
         }
 
         const newCount = existing.attempt_count + 1
         if (newCount > MAX_ATTEMPTS) {
-            return { count: newCount, blocked: true }
+            return { count: existing.attempt_count, blocked: true, reason: 'limit' }
         }
 
         await admin
@@ -118,5 +113,25 @@ export async function logIPAddress(
         } as never)
     } catch {
         // Non-fatal — never crash on logging
+    }
+}
+
+// ── Log Individual Submission Audit ──────────────────────────────────────────
+export async function logAuditSubmission(
+    teamId: string,
+    round: number,
+    result: string,
+    ip: string
+): Promise<void> {
+    try {
+        const admin = createSupabaseAdmin()
+        await admin.from('submission_logs').insert({
+            team_id: teamId,
+            round,
+            result,
+            ip,
+        } as never)
+    } catch (e) {
+        console.error("Failed to log submission audit", e)
     }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getElapsedSeconds, formatTime } from '@/lib/timer'
+import { getElapsedSeconds, formatTime } from '@/lib/timer/client'
 
 export default function MiniTimer({
     startTime,

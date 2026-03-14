@@ -28,8 +28,13 @@ export async function middleware(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
 
     // ── Public routes — no auth required ───────────────────────────────────────
-    const publicPaths = ['/login', '/register', '/api/auth', '/']
+    const publicPaths = ['/login', '/register', '/api/auth']
     const isPublic = publicPaths.some(p => pathname.startsWith(p))
+
+    // ── Redirect root to dashboard ─────────────────────────────────────────────
+    if (pathname === '/') {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
 
     // ── Redirect unauthenticated users ─────────────────────────────────────────
     if (!user && !isPublic) {

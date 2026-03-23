@@ -3,7 +3,7 @@ export interface DebugProblem {
     title: string;
     description: string;
     language: 'python' | 'javascript' | 'cpp';
-    code: string;
+    codeLines: string[];
     buggyLineIndex: number; // 0-indexed
     fixes: string[]; // 4 options, one of which is correct
     correctFixIndex: number;
@@ -16,18 +16,20 @@ export const ROUND2_PROBLEMS: DebugProblem[] = [
         title: "E-Commerce Checkout System",
         description: "This function sums item prices and adds a $5 shipping fee if the total is under $50. Locate the logic leak.",
         language: 'python',
-        code: `def calculate_checkout_total(prices):
-    total = sum(prices)
-    
-    # Apply 10% discount for orders over $100
-    if total >= 100:
-        total = total * 0.9
-    
-    # Add shipping fee for small orders
-    if total < 50:
-        total = total - 5 # BUG LINE
-    
-    return total`,
+        codeLines: [
+            "def calculate_checkout_total(prices):",
+            "    total = sum(prices)",
+            "    ",
+            "    # Apply 10% discount for orders over $100",
+            "    if total >= 100:",
+            "        total = total * 0.9",
+            "    ",
+            "    # Add shipping fee for small orders",
+            "    if total < 50:",
+            "        total = total - 5",
+            "    ",
+            "    return total"
+        ],
         buggyLineIndex: 9,
         fixes: [
             "total = total + 5",
@@ -36,80 +38,86 @@ export const ROUND2_PROBLEMS: DebugProblem[] = [
             "return total + 5"
         ],
         correctFixIndex: 0,
-        expectedBehavior: "For total < 50, shipping should be ADDED."
+        expectedBehavior: "For prices=[20, 10], result should be 35."
     },
     {
         id: 1,
-        title: "User Profile Health Check",
-        description: "Validate a profile. It's valid if length >= 3 and email ends with @example.com.",
+        title: "Access Control Logic",
+        description: "This validator should only approve users with a name of 3+ chars AND a specific domain. It's letting too many people in.",
         language: 'javascript',
-        code: `function validateProfile(username, email) {
-    const isNameValid = username.length >= 3;
-    const isEmailValid = email.endsWith("@example.com");
-    
-    if (isNameValid && isEmailValid) {
-        return false; // BUG LINE
-    }
-    
-    return false;
-}`,
+        codeLines: [
+            "function validateProfile(username, email) {",
+            "    const isNameValid = username.length >= 3;",
+            "    const isEmailValid = email.endsWith(\"@example.com\");",
+            "    ",
+            "    if (isNameValid && isEmailValid) {",
+            "        return false;",
+            "    }",
+            "    ",
+            "    return false;",
+            "}"
+        ],
         buggyLineIndex: 5,
         fixes: [
             "return true;",
-            "return \"VALID\";",
-            "return isNameValid;",
-            "throw new Error();"
+            "return username === email;",
+            "return isEmailValid;",
+            "throw new Error('Access Denied');"
         ],
         correctFixIndex: 0,
-        expectedBehavior: "Should return true for valid profiles."
+        expectedBehavior: "For valid inputs, should return true. Currently always returns false."
     },
     {
         id: 2,
-        title: "Student Performance Summary",
-        description: "Calculate average. If 50 or above, return 'Pass'. Otherwise, return 'Fail'.",
+        title: "Grade Summarizer",
+        description: "This script calculates if a student passed. It should require an average strictly GREATER than 50. Currently, 50-score students are failing wrongly.",
         language: 'python',
-        code: `def summarize_performance(grades):
-    if not grades: return "Fail"
-    
-    avg = sum(grades) / len(grades)
-    
-    # Check passing threshold
-    if avg > 50: # BUG LINE
-        return "Pass"
-    
-    return "Fail"`,
+        codeLines: [
+            "def summarize_performance(grades):",
+            "    if not grades: return \"Fail\"",
+            "    ",
+            "    avg = sum(grades) / len(grades)",
+            "    ",
+            "    # Check passing threshold",
+            "    if avg > 50:",
+            "        return \"Pass\"",
+            "    ",
+            "    return \"Fail\""
+        ],
         buggyLineIndex: 6,
         fixes: [
             "if avg >= 50:",
             "if avg == 50:",
             "if avg > 49:",
-            "if avg != 0:"
+            "return \"Pass\" if avg >= 50 else \"Fail\""
         ],
         correctFixIndex: 0,
-        expectedBehavior: "Average of exactly 50 should be a 'Pass'."
+        expectedBehavior: "A student with 50 average should receive 'Pass'."
     },
     {
         id: 3,
-        title: "Smart Inventory Alert",
-        description: "Restock if status is 'active' AND quantity is 5 or less.",
+        title: "Inventory Alert",
+        description: "The system should ONLY alert for restocking if the product is 'active' AND quantity is BELOW 5. It's alerting for high stock!",
         language: 'javascript',
-        code: `function shouldRestock(status, quantity) {
-    const isActive = status === 'active';
-    
-    if (isActive && quantity >= 5) { // BUG LINE
-        return true;
-    }
-    
-    return false;
-}`,
+        codeLines: [
+            "function shouldRestock(status, quantity) {",
+            "    const isActive = status === 'active';",
+            "    ",
+            "    if (isActive && quantity >= 5) {",
+            "        return true;",
+            "    }",
+            "    ",
+            "    return false;",
+            "}"
+        ],
         buggyLineIndex: 3,
         fixes: [
-            "if (isActive && quantity <= 5) {",
-            "if (isActive || quantity <= 5) {",
+            "if (isActive && quantity < 5) {",
+            "if (isActive || quantity < 5) {",
             "if (quantity < 5) {",
-            "if (isActive) {"
+            "return quantity < 5;"
         ],
         correctFixIndex: 0,
-        expectedBehavior: "Quantity of 5 or less should trigger restock."
+        expectedBehavior: "For isActive=true, quantity=10, should return false."
     }
 ];

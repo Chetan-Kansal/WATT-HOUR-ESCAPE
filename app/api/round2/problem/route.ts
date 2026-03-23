@@ -45,17 +45,11 @@ export async function GET(req: NextRequest) {
 
         const problem = ROUND2_PROBLEMS[targetIndex]
 
-        // Clean the code of # BUG LINE or // BUG LINE comments
-        const cleanCode = problem.code
-            .replace(/# BUG LINE/g, '')
-            .replace(/\/\/ BUG LINE/g, '')
-            .trim()
-
         return NextResponse.json({
             id: problem.id,
             title: problem.title,
             description: problem.description,
-            code: cleanCode,
+            codeLines: problem.codeLines,
             language: problem.language,
             fixes: problem.fixes,
             expectedBehavior: problem.expectedBehavior,

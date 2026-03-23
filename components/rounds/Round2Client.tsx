@@ -5,11 +5,23 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, XCircle, Loader2, Terminal, Cpu, ChevronRight, Activity, ShieldAlert, CpuIcon, ScanLine, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ROUND2_PROBLEMS, DebugProblem } from '@/lib/round2/constants'
+import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
+
+interface ProblemData {
+    id: number;
+    title: string;
+    description: string;
+    codeLines: string[];
+    language: string;
+    fixes: string[];
+    expectedBehavior: string;
+    current_problem_index: number;
+    total_problems: number;
+}
 
 export default function Round2Client() {
     const router = useRouter()
-    const [problem, setProblem] = useState<DebugProblem | null>(null)
+    const [problem, setProblem] = useState<ProblemData | null>(null)
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
     const [currentIndex, setCurrentIndex] = useState(0)
@@ -27,8 +39,7 @@ export default function Round2Client() {
                     router.push('/dashboard')
                     return
                 }
-                const prob = ROUND2_PROBLEMS[data.current_problem_index]
-                setProblem(prob)
+                setProblem(data)
                 setCurrentIndex(data.current_problem_index)
             })
             .catch(() => toast.error('Failed to initialize uplink'))
@@ -64,6 +75,7 @@ export default function Round2Client() {
                 } else {
                     setSelectedLine(null)
                     setSelectedFix(null)
+                    setStatusMessage(null)
                     fetchStatus()
                 }
             } else {
@@ -86,26 +98,26 @@ export default function Round2Client() {
 
     if (!problem) return null
 
-    const codeLines = problem.code.split('\n')
+    const codeLines = problem.codeLines
 
     return (
-        <div className="space-y-6 max-w-6xl mx-auto">
+        <div className="space-y-6 max-w-6xl mx-auto px-4 lg:px-0">
             {/* Header: Status Bar */}
-            <div className="flex items-center justify-between bg-black/40 p-4 rounded-xl border border-green-500/20 backdrop-blur-md relative overflow-hidden">
+            <div className="flex flex-col md:flex-row items-center justify-between bg-black/40 p-4 rounded-xl border border-green-500/20 backdrop-blur-md relative overflow-hidden gap-4">
                 <div className="absolute inset-0 bg-green-500/5 animate-pulse" />
                 <div className="flex items-center gap-6 relative z-10">
                     <div className="flex items-center gap-2">
                         <Activity size={16} className="text-green-500 animate-pulse" />
                         <span className="text-[10px] font-mono text-green-500/60 uppercase tracking-widest">Sector_Safety_Audit</span>
                     </div>
-                    <div className="h-4 w-px bg-green-500/20" />
+                    <div className="h-4 w-px bg-green-500/20 hidden md:block" />
                     <div className="flex items-center gap-3">
                         <span className="text-sm font-bold font-mono text-green-400">UNIT_{currentIndex + 1}: {problem.title.toUpperCase()}</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 relative z-10">
-                    {ROUND2_PROBLEMS.map((_, idx) => (
-                        <div key={idx} className={`h-1 w-8 rounded-full transition-all duration-500 ${idx < currentIndex ? 'bg-green-500' : idx === currentIndex ? 'bg-green-400 animate-pulse' : 'bg-green-900/30'}`} />
+                <div className="flex items-center gap-2 relative z-10 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                    {Array.from({ length: problem.total_problems }).map((_, idx) => (
+                        <div key={idx} className={`h-1 w-8 shrink-0 rounded-full transition-all duration-500 ${idx < currentIndex ? 'bg-green-500' : idx === currentIndex ? 'bg-green-400 animate-pulse' : 'bg-green-900/30'}`} />
                     ))}
                 </div>
             </div>
@@ -113,7 +125,7 @@ export default function Round2Client() {
             <div className="grid lg:grid-cols-12 gap-6">
                 {/* Left: Code Inspection (Col 7) */}
                 <div className="lg:col-span-7 space-y-4">
-                    <div className="bg-[#0D1117] rounded-xl border border-white/5 overflow-hidden flex flex-col h-[600px] shadow-2xl relative group">
+                    <div className="bg-[#0D1117] rounded-xl border border-white/5 overflow-hidden flex flex-col h-[450px] md:h-[600px] shadow-2xl relative group">
                         {/* Scanning HUD Overlay */}
                         <div className="absolute top-0 left-0 w-full h-1 bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.5)] z-20 pointer-events-none transition-all duration-[2000ms] ease-linear" style={{ top: `${scanPulse}%` }} />
                         
@@ -122,21 +134,21 @@ export default function Round2Client() {
                                 <ScanLine size={16} className="text-green-500" />
                                 <span className="text-xs font-bold text-white/70 font-mono tracking-widest">LOGIC_FLOW_ANALYSIS</span>
                             </div>
-                            <span className="text-[10px] font-mono text-green-500/40">{problem.language.toUpperCase()}_KERNEL v2.4</span>
+                            <span className="text-[10px] font-mono text-green-500/40">{problem.language.toUpperCase()}_KERNEL v2.5</span>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 font-mono text-sm custom-scrollbar bg-[#010409]">
+                        <div className="flex-1 overflow-x-auto overflow-y-auto p-4 font-mono text-[12px] md:text-sm custom-scrollbar bg-[#010409]">
                             {codeLines.map((line, idx) => (
                                 <motion.div
                                     key={idx}
                                     onClick={() => { setSelectedLine(idx); setStatusMessage(null); }}
-                                    className={`group flex items-start gap-4 cursor-pointer rounded px-2 py-1 transition-all relative ${selectedLine === idx ? 'bg-green-500/10 border-l-2 border-green-500' : 'hover:bg-white/5'}`}
+                                    className={`group flex items-start gap-4 cursor-pointer rounded px-2 py-1 transition-all relative min-w-max ${selectedLine === idx ? 'bg-green-500/10 border-l-2 border-green-500' : 'hover:bg-white/5'}`}
                                     whileHover={{ x: 4 }}
                                 >
                                     <span className={`w-8 text-right text-xs shrink-0 select-none ${selectedLine === idx ? 'text-green-500 font-bold' : 'text-white/20'}`}>
                                         {String(idx + 1).padStart(2, '0')}
                                     </span>
-                                    <span className={`whitespace-pre break-all ${selectedLine === idx ? 'text-green-400' : 'text-blue-100/80 group-hover:text-white'}`}>
+                                    <span className={`whitespace-pre ${selectedLine === idx ? 'text-green-400' : 'text-blue-100/80 group-hover:text-white'}`}>
                                         {line || ' '}
                                     </span>
                                     {selectedLine === idx && (
@@ -182,10 +194,10 @@ export default function Round2Client() {
                                     className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden group ${selectedFix === idx ? 'bg-green-500/10 border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
                                 >
                                     <div className="flex items-center gap-3 relative z-10">
-                                        <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-bold ${selectedFix === idx ? 'bg-green-500 border-green-500 text-black' : 'border-white/20 text-white/40'}`}>
+                                        <div className={`w-6 h-6 shrink-0 rounded-full border flex items-center justify-center text-[10px] font-bold ${selectedFix === idx ? 'bg-green-500 border-green-500 text-black' : 'border-white/20 text-white/40'}`}>
                                             {String.fromCharCode(65 + idx)}
                                         </div>
-                                        <code className={`text-xs ${selectedFix === idx ? 'text-green-400' : 'text-white/60 group-hover:text-white/80'}`}>
+                                        <code className={`text-xs break-all ${selectedFix === idx ? 'text-green-400' : 'text-white/60 group-hover:text-white/80'}`}>
                                             {fix}
                                         </code>
                                     </div>
@@ -239,6 +251,7 @@ export default function Round2Client() {
                 }
                 .custom-scrollbar::-webkit-scrollbar {
                     width: 4px;
+                    height: 4px;
                 }
                 .custom-scrollbar::-webkit-scrollbar-track {
                     background: transparent;

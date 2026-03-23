@@ -3,18 +3,28 @@ import type { Team, Progress } from '@/types/database'
 
 // ── Get current authenticated team ──────────────────────────────────────────
 export async function getAuthenticatedTeam(): Promise<Team | null> {
-    const supabase = createSupabaseServerClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) return null
+    try {
+        const supabase = createSupabaseServerClient()
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) return null
 
-    const admin = createSupabaseAdmin()
-    const { data: team } = await admin
-        .from('teams')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+        const admin = createSupabaseAdmin()
+        const { data: team, error: teamError } = await admin
+            .from('teams')
+            .select('*')
+            .eq('id', user.id)
+            .single()
 
-    return (team as Team | null)
+        if (teamError) {
+            console.error("getAuthenticatedTeam: Database error:", teamError)
+            return null
+        }
+
+        return (team as Team | null)
+    } catch (e) {
+        console.error("getAuthenticatedTeam: Unexpected error:", e)
+        return null
+    }
 }
 
 // ── Get team progress ────────────────────────────────────────────────────────

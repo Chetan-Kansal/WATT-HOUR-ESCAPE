@@ -3,54 +3,46 @@
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { Play, AlertTriangle, CheckCircle2, XCircle, Loader2, RefreshCw, Terminal, Code2, PlayCircle, Cpu, ChevronDown } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, RefreshCw, Terminal, Code2, PlayCircle, Cpu, ChevronDown, Lock, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false })
 
 interface Problem {
-    id: string
+    id: number
     title: string
     problem_text: string
-    code_snippet: string
-    language: string
-    test_cases: Array<{ input: string; expected: string }>
+    code_snippet: {
+        python: string
+        javascript: string
+    }
+    expected_behavior: string
     attempts_used: number
     max_attempts: number
+    current_problem_index: number
+    total_problems: number
+    completed?: boolean
 }
 
 interface RunResult {
     passed: boolean
-    results: Array<{
-        test_num: number
-        passed: boolean
-        expected: string
-        received: string
-        compile_output: string | null
-        stderr: string | null
-        status_desc: string
-    }>
-    execution_time: string
-    attempt: number
-    max_attempts: number
     message: string
+    stdout: string | null
+    expected: string
+    stderr: string | null
+    compile_output: string | null
+    status_desc: string
+    current_attempts: number
+    max_attempts: number
+    next_unlocked: boolean
+    round_complete: boolean
 }
 
-const STARTER_CODES: Record<string, string> = {
-    python: `def sum_n(n):\n    total = 0\n    for i in range(1,n):\n        total += i\n    return total`,
-    javascript: `function sum_n(n){\n let total = 0\n for(let i=1;i<n;i++){\n  total += i\n }\n return total\n}`,
-    java: `public static int sum_n(int n){\n int total = 0;\n for(int i=1;i<n;i++){\n  total += i;\n }\n return total;\n}`,
-    cpp: `int sum_n(int n){\n int total = 0;\n for(int i=1;i<n;i++){\n  total += i;\n }\n return total;\n}`,
-    c: `int sum_n(int n){\n int total = 0;\n for(int i=1;i<n;i++){\n  total += i;\n }\n return total;\n}`
-}
-
-const SUPPORTED_LANGUAGES = [
+const LANGUAGES = [
     { id: 'python', name: 'Python' },
-    { id: 'javascript', name: 'JavaScript' },
-    { id: 'java', name: 'Java' },
-    { id: 'cpp', name: 'C++' },
-    { id: 'c', name: 'C' }
+    { id: 'javascript', name: 'JavaScript' }
 ]
 
 export default function Round2Client() {
@@ -61,25 +53,36 @@ export default function Round2Client() {
     const [loading, setLoading] = useState(true)
     const [running, setRunning] = useState(false)
     const [result, setResult] = useState<RunResult | null>(null)
+    const [currentIndex, setCurrentIndex] = useState(0)
 
-    useEffect(() => {
-        fetch('/api/round2/problem', { cache: 'no-store' })
+    const fetchProblem = (index?: number) => {
+        setLoading(true)
+        const url = index !== undefined ? `/api/round2/problem?index=${index}&t=${Date.now()}` : `/api/round2/problem?t=${Date.now()}`
+        fetch(url, { cache: 'no-store' })
             .then(r => r.json())
             .then(data => {
+                if (data.completed) {
+                    toast.success("Round 2 already completed!")
+                    router.push('/dashboard')
+                    return
+                }
                 setProblem(data)
-                const defaultLang = data.language?.toLowerCase() || 'python'
-                setSelectedLanguage(defaultLang)
-                setCode(STARTER_CODES[defaultLang] || data.code_snippet || '')
+                setCurrentIndex(data.current_problem_index)
+                setCode(data.code_snippet[selectedLanguage] || '')
             })
             .catch(() => toast.error('Failed to load problem'))
             .finally(() => setLoading(false))
+    }
+
+    useEffect(() => {
+        fetchProblem()
     }, [])
 
-    const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const lang = e.target.value
-        setSelectedLanguage(lang)
-        setCode(STARTER_CODES[lang] || '')
-    }
+    useEffect(() => {
+        if (problem) {
+            setCode(problem.code_snippet[selectedLanguage as keyof typeof problem.code_snippet] || '')
+        }
+    }, [selectedLanguage, problem?.current_problem_index])
 
     const handleSubmit = async () => {
         if (!problem || running) return
@@ -89,17 +92,33 @@ export default function Round2Client() {
             const res = await fetch('/api/round2/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ problem_id: problem.id, code, language: selectedLanguage }),
+                body: JSON.stringify({ 
+                    problem_id: problem.id, 
+                    problem_index: problem.current_problem_index,
+                    code, 
+                    language: selectedLanguage 
+                }),
             })
             const data: RunResult = await res.json()
             if (!res.ok) {
-                toast.error((data as unknown as { error: string }).error || 'Submission failed')
+                toast.error((data as any).error || 'Submission failed')
                 return
             }
             setResult(data)
             if (data.passed) {
-                toast.success('✓ BUILD SUCCESS! Round 2 complete!')
-                setTimeout(() => router.push('/dashboard'), 2000)
+                toast.success('✓ CORRECT!')
+                if (data.round_complete) {
+                    toast.success('ROUND 2 COMPLETE!')
+                    setTimeout(() => router.push('/dashboard'), 2000)
+                } else if (data.next_unlocked) {
+                    setTimeout(() => {
+                        fetchProblem()
+                        setResult(null)
+                    }, 2500)
+                }
+            } else {
+                toast.error('Test Failed')
+                setProblem(prev => prev ? { ...prev, attempts_used: data.current_attempts } : null)
             }
         } catch {
             toast.error('Submission failed. Please try again.')
@@ -115,78 +134,90 @@ export default function Round2Client() {
         </div>
     )
 
-    if (!problem) return (
-        <div className="text-center text-muted-foreground py-12">
-            <AlertTriangle size={40} className="mx-auto mb-3" />
-            <p>Failed to load problem. <button onClick={() => window.location.reload()} className="text-primary hover:underline">Retry</button></p>
-        </div>
-    )
+    if (!problem) return null
 
     return (
         <div className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-4 h-[auto] md:h-[600px]">
-                {/* Problem Description Pane */}
+            {/* Progress Bar / Steps */}
+            <div className="flex items-center justify-between gap-2 px-2 pb-2">
+                {ROUND2_PROBLEMS.map((p, idx) => (
+                    <div key={idx} className="flex-1 flex items-center gap-2">
+                        <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(34,197,94,0.2)] ${idx < currentIndex ? 'bg-green-500' : idx === currentIndex ? 'bg-green-400 animate-pulse' : 'bg-green-900/20'}`} />
+                        {idx < ROUND2_PROBLEMS.length - 1 && <ChevronRight size={14} className="text-green-900/40" />}
+                    </div>
+                ))}
+            </div>
+
+            <div className="flex items-center justify-between bg-green-950/20 p-3 rounded-lg border border-green-500/20 backdrop-blur-sm">
+                <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-mono text-green-500/60 uppercase tracking-widest">DECRYPTION_PHASE:</span>
+                    <span className="text-sm font-bold font-mono text-green-400 drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]">BLOCK_{currentIndex + 1}: {problem.title.toUpperCase()}</span>
+                </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6 h-[auto] md:h-[550px]">
+                {/* Left: Description */}
                 <div className="flex flex-col gap-4 h-full">
-                    <div className="glass-card rounded-xl border border-border/50 flex-1 flex flex-col overflow-hidden">
-                        {/* Pane Header */}
-                        <div className="bg-muted/30 border-b border-border/50 px-4 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Code2 size={16} className="text-primary" />
-                                <span className="text-xs font-semibold text-foreground uppercase tracking-wider font-mono">Problem Description</span>
-                            </div>
+                    <div className="glass-card rounded-xl border border-border/50 flex-1 flex flex-col overflow-hidden bg-muted/5">
+                        <div className="bg-green-950/40 border-b border-green-500/20 px-4 py-2 flex items-center gap-2 relative">
+                            <div className="absolute inset-0 bg-green-500/5 animate-pulse pointer-events-none" />
+                            <Terminal size={16} className="text-green-500" />
+                            <span className="text-xs font-bold text-green-400 uppercase tracking-[0.2em] font-mono">KERNEL_BRIEFING</span>
                         </div>
-                        
                         <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
-                            <h2 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                                {problem.title}
-                            </h2>
-                            <div className="prose prose-invert prose-sm max-w-none text-muted-foreground">
-                                <p className="whitespace-pre-wrap leading-relaxed font-sans">{problem.problem_text}</p>
+                            <p className="text-sm text-muted-foreground leading-relaxed mb-6 font-sans">
+                                {problem.problem_text}
+                            </p>
+                            <div className="space-y-4">
+                                <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
+                                    <h4 className="text-[10px] uppercase tracking-widest text-primary font-bold mb-2">Expected Behavior</h4>
+                                    <p className="text-xs text-foreground/80 font-mono italic">{problem.expected_behavior}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Test Cases Terminal */}
-                    <div className="glass-card rounded-xl border border-border/50 bg-[#0A0A0A] flex-shrink-0">
-                        <div className="bg-[#111] border-b border-[#333] px-4 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Terminal size={14} className="text-muted-foreground" />
-                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Test Cases_</span>
-                            </div>
-                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${problem.attempts_used >= problem.max_attempts - 1 ? 'bg-red-500/20 text-red-400' : 'bg-primary/20 text-primary'}`}>
-                                ATTEMPTS: {problem.attempts_used}/{problem.max_attempts}
-                            </span>
+                    {/* Test Results Terminal (Simplified) */}
+                    <div className="glass-card rounded-xl border border-border/50 bg-[#0A0A0A] h-[180px] flex flex-col">
+                        <div className="bg-[#111] border-b border-[#333] px-4 py-2 flex items-center gap-2">
+                            <Terminal size={14} className="text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Output Log_</span>
                         </div>
-                        <div className="p-4 space-y-3 max-h-[200px] overflow-y-auto custom-scrollbar-dark">
-                            {Array.isArray(problem.test_cases) && problem.test_cases.slice(0, 3).map((tc, i) => (
-                                <div key={i} className="font-mono text-[11px] leading-relaxed">
-                                    <div className="flex"><span className="text-muted-foreground w-16 select-none border-r border-[#333] mr-2 pr-2 text-right">IN</span><span className="text-blue-300 break-all whitespace-pre-wrap">{tc.input}</span></div>
-                                    <div className="flex"><span className="text-muted-foreground w-16 select-none border-r border-[#333] mr-2 pr-2 text-right">OUT</span><span className="text-green-400 break-all whitespace-pre-wrap">{tc.expected}</span></div>
+                        <div className="p-4 overflow-y-auto flex-1 font-mono text-[11px] space-y-2">
+                            {result ? (
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        {result.passed ? <CheckCircle2 size={14} className="text-green-400" /> : <XCircle size={14} className="text-red-400" />}
+                                        <span className={result.passed ? 'text-green-400' : 'text-red-400'}>{result.message}</span>
+                                    </div>
+                                    {!result.passed && (
+                                        <>
+                                            <div className="text-muted-foreground mt-2 border-t border-white/5 pt-2">Details:</div>
+                                            <div className="text-red-300">Expected: {result.expected}</div>
+                                            <div className="text-red-400">Received: {result.stdout || 'None'}</div>
+                                            {result.stderr && <div className="text-red-500 overflow-hidden text-ellipsis italic opacity-70">Stderr: {result.stderr}</div>}
+                                        </>
+                                    )}
                                 </div>
-                            ))}
+                            ) : (
+                                <div className="text-muted-foreground/30 animate-pulse italic">Waiting for execution...</div>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* Editor Panel Pane */}
+                {/* Right: Editor */}
                 <div className="flex flex-col h-full gap-4">
                     <div className="glass-card rounded-xl border border-border/50 flex-1 flex flex-col overflow-hidden bg-[#1E1E1E]">
-                        {/* Editor Header (macOS style + Language Selector) */}
                         <div className="bg-[#2D2D2D] border-b border-[#111] px-4 py-2 flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                                {/* Traffic lights */}
-                                <div className="flex gap-1.5 hidden sm:flex">
-                                    <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
-                                    <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
-                                    <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
-                                </div>
                                 <div className="relative">
                                     <select
                                         value={selectedLanguage}
-                                        onChange={handleLanguageChange}
-                                        className="appearance-none bg-[#1E1E1E] border border-[#444] text-[#CCCCCC] text-xs font-mono py-1 pl-3 pr-8 rounded focus:outline-none focus:border-primary transition-colors cursor-pointer"
+                                        onChange={(e) => setSelectedLanguage(e.target.value)}
+                                        className="appearance-none bg-[#1E1E1E] border border-[#444] text-[#CCCCCC] text-xs font-mono py-1 pl-3 pr-8 rounded focus:outline-none focus:border-primary cursor-pointer transition-colors"
                                     >
-                                        {SUPPORTED_LANGUAGES.map(lang => (
+                                        {LANGUAGES.map(lang => (
                                             <option key={lang.id} value={lang.id}>{lang.name}</option>
                                         ))}
                                     </select>
@@ -194,109 +225,45 @@ export default function Round2Client() {
                                 </div>
                             </div>
                             <button
-                                onClick={() => setCode(STARTER_CODES[selectedLanguage] || '')}
+                                onClick={() => setCode(problem.code_snippet[selectedLanguage as keyof typeof problem.code_snippet] || '')}
                                 className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 font-mono uppercase"
-                                title="Reset to standard starter code"
                             >
-                                <RefreshCw size={12} /> Reset
+                                <RefreshCw size={12} /> Reset Code
                             </button>
                         </div>
                         
                         <div className="flex-1 relative">
                             <MonacoEditor
-                                language={selectedLanguage === 'cpp' || selectedLanguage === 'c' ? 'cpp' : selectedLanguage}
+                                language={selectedLanguage === 'javascript' ? 'javascript' : 'python'}
                                 value={code}
                                 onChange={v => setCode(v ?? '')}
                                 theme="vs-dark"
                                 options={{
                                     fontSize: 14,
                                     minimap: { enabled: false },
-                                    lineNumbers: 'on',
                                     scrollBeyondLastLine: false,
                                     padding: { top: 16 },
-                                    fontFamily: 'JetBrains Mono, Fira Code, monospace',
+                                    fontFamily: 'JetBrains Mono, monospace',
                                     renderLineHighlight: 'all',
-                                    smoothScrolling: true,
                                     cursorBlinking: 'smooth',
-                                    cursorSmoothCaretAnimation: 'on',
                                 }}
                             />
                         </div>
                     </div>
 
-                    {/* Action Button */}
                     <button
                         onClick={handleSubmit}
                         disabled={running}
-                        className="w-full h-12 flex-shrink-0 bg-primary/90 text-primary-foreground rounded-xl font-mono text-sm uppercase tracking-widest font-bold hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-glow-blue relative overflow-hidden group"
+                        className="w-full h-14 flex-shrink-0 bg-green-600 text-black rounded-xl font-mono text-sm uppercase tracking-[0.3em] font-black hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:shadow-[0_0_30px_rgba(34,197,94,0.6)]"
                     >
-                        {/* Glitch effect layer */}
-                        <div className="absolute inset-0 w-full h-full bg-white/20 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] skew-x-12" />
-                        
                         {running ? (
-                            <><Cpu size={18} className="animate-spin" /> <span>Compiling...</span></>
+                            <><Cpu size={20} className="animate-spin" /> <span>BYPASSING_FIREWALL...</span></>
                         ) : (
-                            <><PlayCircle size={18} /> <span>Execute & Submit</span></>
+                            <><PlayCircle size={20} /> <span>EXECUTE_PAYLOAD</span></>
                         )}
                     </button>
                 </div>
             </div>
-
-            {/* Results Console Terminal */}
-            <AnimatePresence>
-                {result && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className={`rounded-xl border bg-[#0A0A0A] overflow-hidden ${result.passed ? 'border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.1)]' : 'border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]'}`}
-                    >
-                        <div className={`px-4 py-2 border-b font-mono text-[13px] flex flex-col md:flex-row md:items-center justify-between gap-2
-                            ${result.passed ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}
-                        `}>
-                            <div className="flex items-center gap-2">
-                                {result.passed ? <CheckCircle2 size={16} className="text-green-400" /> : <XCircle size={16} className="text-red-400" />}
-                                <span className={`${result.passed ? 'text-green-400' : 'text-red-400'} font-bold uppercase tracking-wider whitespace-pre-wrap leading-tight`}>
-                                    {result.message}
-                                </span>
-                            </div>
-                            <div className="flex gap-4 text-muted-foreground text-xs justify-end">
-                                <span>EXEC: {result.execution_time}s</span>
-                                <span>ATTEMPT: {result.attempt}/{result.max_attempts}</span>
-                            </div>
-                        </div>
-
-                        <div className="p-5 space-y-6 font-mono text-[13px] leading-relaxed">
-                            {/* Array of Test Results */}
-                            {result.results?.map((tcRes, idx) => (
-                                <div key={idx} className="space-y-3">
-                                    <p className={`${tcRes.passed ? 'text-green-400' : 'text-red-400'} font-bold tracking-widest uppercase`}>
-                                        TEST {tcRes.test_num} {tcRes.passed ? 'PASSED' : 'FAILED'}
-                                    </p>
-                                    
-                                    {!tcRes.passed && (
-                                        <div className="space-y-3 text-[12px] opacity-90 pl-2 border-l-2 border-[#333]">
-                                            <div className="space-y-1">
-                                                <span className="text-muted-foreground block text-[10px] tracking-wider uppercase">EXPECTED:</span>
-                                                <span className="text-green-400 block break-all whitespace-pre-wrap font-bold">{tcRes.expected}</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <span className="text-muted-foreground block text-[10px] tracking-wider uppercase">RECEIVED:</span>
-                                                <span className="text-red-400 block break-all whitespace-pre-wrap font-bold">{tcRes.received || 'No Output or Execution Error'}</span>
-                                            </div>
-                                            {tcRes.stderr && (
-                                              <div className="space-y-1 mt-2">
-                                                <span className="text-red-500/70 block text-[10px] tracking-wider uppercase">stderr:</span>
-                                                <span className="text-red-400 block whitespace-pre-wrap break-all">{tcRes.stderr}</span>
-                                              </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
         </div>
     )
 }

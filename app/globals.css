@@ -127,3 +127,75 @@
   .rank-2 { background: linear-gradient(135deg, #C0C0C0, #A0A0A0); color: #000; }
   .rank-3 { background: linear-gradient(135deg, #CD7F32, #A0522D); color: #fff; }
 }
+  /* Round-Specific Themes */
+  .theme-neon-surge {
+    --theme-primary: 217 91% 60%; /* Blue */
+    --theme-glow: rgba(59, 130, 246, 0.5);
+    background: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15), transparent 70%), hsl(var(--background));
+  }
+
+  .theme-matrix-root {
+    --theme-primary: 142 70% 45%; /* Green */
+    --theme-glow: rgba(34, 197, 94, 0.5);
+    background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.1), transparent 70%), #050505;
+  }
+
+  .theme-amber-grid {
+    --theme-primary: 38 92% 50%; /* Amber */
+    --theme-glow: rgba(245, 158, 11, 0.5);
+    background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.1), transparent 70%), #0a0a05;
+  }
+
+  .theme-prism-glass {
+    --theme-primary: 270 91% 65%; /* Purple/Indigo */
+    --theme-glow: rgba(168, 85, 247, 0.5);
+    background: radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.15), transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.15), transparent 40%),
+                hsl(var(--background));
+  }
+
+  .theme-matrix-breach {
+    --theme-primary: 142 70% 45%; /* Matrix Green */
+    --theme-glow: rgba(34, 197, 94, 0.5);
+    background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.15), transparent 70%), #050a05;
+  }
+
+  /* Interactive Elements */
+  .glow-border {
+    position: relative;
+  }
+  .glow-border::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(var(--theme-glow), transparent);
+    border-radius: inherit;
+    z-index: -1;
+    opacity: 0.5;
+  }
+
+  .animate-slow-pulse {
+    animation: slow-pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes slow-pulse {
+    0%, 100% { opacity: 0.1; }
+    50% { opacity: 0.3; }
+  }
+
+  .animate-glitch {
+    animation: glitch 0.3s cubic-bezier(.25,.46,.45,.94) both infinite;
+    animation-play-state: paused;
+  }
+  .animate-glitch:hover {
+    animation-play-state: running;
+  }
+
+  @keyframes glitch {
+    0% { transform: translate(0) }
+    20% { transform: translate(-2px, 2px) }
+    40% { transform: translate(-2px, -2px) }
+    60% { transform: translate(2px, 2px) }
+    80% { transform: translate(2px, -2px) }
+    100% { transform: translate(0) }
+  }

@@ -218,7 +218,107 @@ INSERT INTO quiz_questions (question, option_a, option_b, option_c, option_d, co
  'Fill 3L twice and combine',
  'Fill 5L and remove 1L',
  'It is impossible with these capacities',
- 'A', 'logic', 'medium');
+ 'A', 'logic', 'medium'),
+
+-- NEW HARDENED QUESTIONS
+('What is the "Ferranti Effect" in power systems?',
+ 'The decrease in voltage at the receiving end of a long transmission line',
+ 'The rise in voltage at the receiving end of a long transmission line under no-load or light-load conditions',
+ 'The loss of synchronization between generators',
+ 'The failure of a circuit breaker to trip during a fault',
+ 'B', 'energy_systems', 'hard'),
+
+('The "Duck Curve" in solar energy management describes:',
+ 'The physical shape of a solar panel array',
+ 'The timing imbalance between peak demand and solar energy production',
+ 'The migration patterns of birds near solar farms',
+ 'The efficiency drop of solar cells at high temperatures',
+ 'B', 'energy_systems', 'hard'),
+
+('In a 3-phase system, what is the relation between Line Voltage (VL) and Phase Voltage (VP) in a Delta connection?',
+ 'VL = VP',
+ 'VL = √3 * VP',
+ 'VL = VP / √3',
+ 'VL = 3 * VP',
+ 'A', 'energy_systems', 'hard'),
+
+('What is the primary purpose of a "Synchronous Condenser" in a power grid?',
+ 'To store large amounts of electrical energy',
+ 'To provide reactive power support and stabilize voltage',
+ 'To convert DC power from solar farms to AC',
+ 'To measure the frequency of the grid with high precision',
+ 'B', 'energy_systems', 'hard'),
+
+('Which phenomenon describes the tendency of alternating current to become distributed within a conductor such that the current density is largest near the surface?',
+ 'Corona Effect',
+ 'Skin Effect',
+ 'Proximity Effect',
+ 'Hall Effect',
+ 'B', 'energy_systems', 'medium'),
+
+('The CAP theorem states that a distributed data store cannot simultaneously provide more than two out of which three guarantees?',
+ 'Cashing, Availability, Partitioning',
+ 'Consistency, Availability, Partition Tolerance',
+ 'Concurrency, Accuracy, Persistence',
+ 'Complexity, Availability, Portability',
+ 'B', 'cs_fundamentals', 'hard'),
+
+('In the context of the Raft consensus algorithm, what is the purpose of "Heartbeats"?',
+ 'To synchronize the clocks of all nodes in the cluster',
+ 'For the leader to maintain authority and prevent new elections',
+ 'To transfer log entries to follower nodes',
+ 'To check the hardware health of the servers',
+ 'B', 'cs_fundamentals', 'hard'),
+
+('What is the "Byzantine Generals Problem" primarily concerned with?',
+ 'Optimizing network routing algorithms',
+ 'Achieving consensus in a system where components may fail and provide conflicting information',
+ 'Protecting against SQL injection attacks',
+ 'Reducing the latency of database queries',
+ 'B', 'cs_fundamentals', 'hard'),
+
+('Which data structure is most commonly used to implement a Priority Queue to achieve O(log n) insertion and deletion?',
+ 'Sorted Linked List',
+ 'Balanced Binary Search Tree',
+ 'Binary Heap',
+ 'Hash Table',
+ 'C', 'cs_fundamentals', 'medium'),
+
+('What is the time complexity of building a heap from an unordered array of n elements?',
+ 'O(log n)',
+ 'O(n)',
+ 'O(n log n)',
+ 'O(n²)',
+ 'B', 'cs_fundamentals', 'hard'),
+
+('If a logical system is "Sound", what does that imply?',
+ 'Every provable statement is true',
+ 'Every true statement is provable',
+ 'The system contains no contradictions',
+ 'The system can represent any mathematical concept',
+ 'A', 'logic', 'hard'),
+
+('Five people are standing in a row. A is next to B but not next to C. If C is next to D and D is next to E, who is definitely not in the middle?',
+ 'A', 'B', 'C', 'E',
+ 'D', 'logic', 'hard'),
+
+('In a set of 8 identical-looking coins, one is slightly heavier. What is the minimum number of weighings on a balance scale to find the heavy coin?',
+ '2', '3', '4', '1',
+ 'A', 'logic', 'hard'),
+
+('Which of these is a non-linear load that typically introduces harmonics into a power system?',
+ 'Incandescent light bulb',
+ 'Electric heater',
+ 'Variable Frequency Drive (VFD)',
+ 'Induction motor running at constant speed',
+ 'C', 'energy_systems', 'hard'),
+
+('What is "Shadow Price" in the context of economic dispatch in power systems?',
+ 'The cost of fuel for the most expensive generator',
+ 'The change in total system cost for a unit change in load at a specific bus',
+ 'The hidden environmental cost of coal power',
+ 'The price of electricity in the black market',
+ 'B', 'energy_systems', 'hard');
 
 -- ============================================================
 -- DEBUG PROBLEMS (Round 2) — 3 problems

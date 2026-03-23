@@ -23,35 +23,47 @@ export async function GET(req: NextRequest) {
         const seen = (progress?.quiz_questions_seen as string[]) || []
 
         // Select a random question from unseen ones
-        let query = admin
+        const { data: allQuestions, error: allQError } = await admin
             .from('quiz_questions')
             .select('id, question, option_a, option_b, option_c, option_d, category, difficulty')
             .eq('is_active', true)
 
-        // Exclude already-seen questions (up to 30 seen before pool reset)
-        if (seen.length > 0 && seen.length < 30) {
-            query = query.not('id', 'in', `(${seen.join(',')})`)
-        } else if (seen.length >= 30) {
-            // Reset seen list when pool is exhausted
-            await admin.from('progress').update({ quiz_questions_seen: [] }).eq('team_id', user.id)
+        if (allQError) {
+            console.error("Round 1 All Questions Fetch Error:", allQError)
+            return NextResponse.json({ error: `Database error: ${allQError.message}` }, { status: 500 })
         }
 
-        const { data: questions } = await query
-
-        if (!questions || questions.length === 0) {
-            return NextResponse.json({ error: 'No questions available' }, { status: 500 })
+        if (!allQuestions || allQuestions.length === 0) {
+            return NextResponse.json({ error: 'No questions available. Please ensure the database is seeded.' }, { status: 500 })
         }
 
-        // Pick random question
-        const randomIndex = Math.floor(Math.random() * questions.length)
-        const question = questions[randomIndex]
+        // Filter out seen questions
+        let availableQuestions = allQuestions.filter(q => !seen.includes(q.id))
+
+        // If pool exhausted, reset seen list and use all questions
+        if (availableQuestions.length === 0) {
+            console.log(`Pool exhausted for team ${user.id}. Resetting seen list.`)
+            await admin.from('progress').upsert({ team_id: user.id, quiz_questions_seen: [] } as never, { onConflict: 'team_id' })
+            availableQuestions = allQuestions
+        }
+
+        // Pick random question from available pool
+        const randomIndex = Math.floor(Math.random() * availableQuestions.length)
+        const question = availableQuestions[randomIndex]
 
         // Track this question as seen
         const updatedSeen = Array.from(new Set([...seen, question.id as string]))
-        await admin
+        const { error: upsertError } = await admin
             .from('progress')
-            .update({ quiz_questions_seen: updatedSeen })
-            .eq('team_id', user.id)
+            .upsert({ 
+                team_id: user.id,
+                quiz_questions_seen: updatedSeen,
+                updated_at: new Date().toISOString()
+            } as never, { onConflict: 'team_id' })
+
+        if (upsertError) {
+            console.error("Round 1 seen list upsert error:", upsertError)
+        }
 
         return NextResponse.json({
             id: question.id,

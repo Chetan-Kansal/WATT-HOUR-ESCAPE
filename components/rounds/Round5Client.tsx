@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation'
 import confetti from 'canvas-confetti'
 import { Play, Pause, AlertTriangle, KeyRound, CheckCircle2, Trophy, Loader2, Disc, Radio, Terminal, Cpu } from 'lucide-react'
 import { toast } from 'sonner'
+import MatrixRain from '@/components/effects/MatrixRain'
 
-interface AudioFile { id: string; url: string; sequence: number }
-interface Problem { id: string; audio_files: AudioFile[] }
-interface SubmitResult { passed: boolean; completed_at: string; rank: number; message: string; points: number }
+interface AudioFile { id: string; url: string; sequence: number; morse_code?: string }
+interface Problem { clips: AudioFile[]; instructions: string; hint: string }
+interface SubmitResult { passed: boolean; total_time: number; final_rank: number | null; message: string }
 
 export default function Round5Client() {
     const router = useRouter()
@@ -46,9 +47,22 @@ export default function Round5Client() {
     }, [loading]);
 
     useEffect(() => {
-        fetch('/api/round5/problem', { cache: 'no-store' })
+        fetch('/api/round5/audio', { cache: 'no-store' })
             .then(r => r.json())
-            .then(data => setProblem(data))
+            .then(data => {
+                if (data.clips) {
+                    setProblem({
+                        clips: data.clips.map((c: any) => ({
+                            id: c.id,
+                            url: c.audio_url,
+                            sequence: c.number,
+                            morse_code: c.morse_code
+                        })),
+                        instructions: data.instructions,
+                        hint: data.hint
+                    })
+                }
+            })
             .catch(() => toast.error('Failed to load transmission'))
             .finally(() => setLoading(false))
 
@@ -98,7 +112,7 @@ export default function Round5Client() {
                 const res = await fetch('/api/round5/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ problem_id: problem.id, answer: answer.trim().toUpperCase() }),
+                    body: JSON.stringify({ key: answer.trim().toUpperCase() }),
                 })
                 const data = await res.json()
                 if (!res.ok) { 
@@ -128,13 +142,14 @@ export default function Round5Client() {
     if (loading) return (
         <div className="flex flex-col items-center justify-center h-64 gap-4">
             <Loader2 size={32} className="animate-spin text-green-500" />
-            <span className="text-xs font-mono text-green-500 tracking-widest uppercase">Intercepting Signals...</span>
+            <span className="text-xs font-mono text-green-500 tracking-[0.3em] font-black uppercase animate-pulse">Breaching Firewall...</span>
         </div>
     )
 
     if (result?.passed) return (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-2xl mx-auto text-center space-y-8">
-            <div className="glass-card rounded-2xl p-12 border border-green-500/30 bg-[#0a0f0a] relative overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.1)]">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-2xl mx-auto text-center space-y-8 relative">
+            <MatrixRain color="#22c55e" opacity={0.15} speed={1.2} />
+            <div className="glass-card rounded-2xl p-12 border border-green-500/30 bg-[#0a150a] relative overflow-hidden shadow-[0_0_50px_rgba(34,197,94,0.1)]">
                 {/* Matrix rain effect background overlay */}
                 <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, #22c55e 2px, #22c55e 4px)', backgroundSize: '100% 4px' }} />
                 
@@ -148,11 +163,11 @@ export default function Round5Client() {
                 <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto relative z-10">
                     <div className="bg-black/50 border border-green-500/30 rounded-xl p-4 transform transition-all hover:scale-105">
                         <p className="text-[10px] text-green-500/70 font-mono uppercase tracking-widest mb-1">Rank Achieved</p>
-                        <p className="text-3xl font-bold font-mono text-white">#{result.rank}</p>
+                        <p className="text-3xl font-bold font-mono text-white">#{result.final_rank || '?'}</p>
                     </div>
                     <div className="bg-black/50 border border-green-500/30 rounded-xl p-4 transform transition-all hover:scale-105">
-                        <p className="text-[10px] text-green-500/70 font-mono uppercase tracking-widest mb-1">Points Secured</p>
-                        <p className="text-3xl font-bold font-mono text-white">{result.points}</p>
+                        <p className="text-[10px] text-green-500/70 font-mono uppercase tracking-widest mb-1">Time (Seconds)</p>
+                        <p className="text-3xl font-bold font-mono text-white">{Math.round(result.total_time)}s</p>
                     </div>
                 </div>
             </div>
@@ -164,17 +179,20 @@ export default function Round5Client() {
     )
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6">
+        <div className="max-w-2xl mx-auto space-y-6 relative">
+            <MatrixRain color="#22c55e" opacity={0.15} speed={0.8} />
+            
             {/* Terminal Header */}
-            <div className="glass-card rounded-t-xl rounded-b-sm border border-green-500/20 bg-[#050505] p-2 flex items-center justify-between border-b-green-500/50">
-                <div className="flex gap-1.5 ml-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500/50" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
-                    <div className="w-3 h-3 rounded-full bg-green-500/80 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse" />
+            <div className="glass-card rounded-t-xl rounded-b-sm border border-green-500/40 bg-[#000a00] p-2 flex items-center justify-between border-b-green-500/50 relative overflow-hidden">
+                <div className="absolute inset-0 bg-green-500/5 animate-pulse pointer-events-none" />
+                <div className="flex gap-1.5 ml-2 relative z-10">
+                    <div className="w-3 h-3 rounded-full bg-green-600 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse" />
+                    <div className="w-3 h-3 rounded-full bg-green-900/50" />
+                    <div className="w-3 h-3 rounded-full bg-green-900/50" />
                 </div>
-                <div className="flex items-center gap-2 mr-2 opacity-70">
-                    <Terminal size={14} className="text-green-500" />
-                    <span className="text-[10px] font-mono text-green-500 tracking-widest">G_JAM_DECRYPTOR_V9.2</span>
+                <div className="flex items-center gap-2 mr-2 opacity-90 relative z-10">
+                    <AlertTriangle size={14} className="text-green-500 animate-bounce" />
+                    <span className="text-[10px] font-black font-mono text-green-500 tracking-[0.2em]">SYSTEM_BREACH_V1.0</span>
                 </div>
             </div>
 
@@ -185,7 +203,20 @@ export default function Round5Client() {
                 
                 <div className="space-y-1 relative z-10 w-full">
                     {terminalText.map((text, i) => (
-                        <motion.div key={i} initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} className={text.includes('ERROR') || text.includes('FATAL') || text.includes('DENIED') ? 'text-red-500' : text.includes('SUCCESS') ? 'text-green-400 font-bold' : text.startsWith('>') ? 'text-white' : 'text-green-500/70'}>
+                        <motion.div 
+                            key={i} 
+                            initial={{ opacity: 0, x: -5 }} 
+                            animate={{ opacity: 1, x: 0 }} 
+                            className={
+                                (text?.includes?.('ERROR') || text?.includes?.('FATAL') || text?.includes?.('DENIED')) 
+                                ? 'text-red-500 font-black animate-glitch' 
+                                : text?.includes?.('SUCCESS') 
+                                ? 'text-green-400 font-bold drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]' 
+                                : text?.startsWith?.('>') 
+                                ? 'text-white font-bold' 
+                                : 'text-green-500/70'
+                            }
+                        >
                             {text}
                         </motion.div>
                     ))}
@@ -198,7 +229,7 @@ export default function Round5Client() {
             </div>
 
             <div className="grid gap-4">
-                {problem?.audio_files.map((file, index) => (
+                {problem?.clips.map((file, index) => (
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -237,8 +268,8 @@ export default function Round5Client() {
                             onClick={() => togglePlay(file.id, file.url)}
                             className={`w-10 h-10 rounded-sm flex items-center justify-center transition-all flex-shrink-0 border 
                                 ${playing === file.id 
-                                    ? 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.3)]' 
-                                    : 'bg-[#111] text-green-500/50 border-green-500/20 hover:bg-[#1a1a1a] hover:text-green-400'}
+                                    ? 'bg-red-500/20 text-red-400 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
+                                    : 'bg-[#001100] text-green-500/50 border-green-500/20 hover:bg-[#001a00] hover:text-green-400'}
                             `}
                         >
                             {playing === file.id ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" className="ml-1" />}
@@ -268,9 +299,9 @@ export default function Round5Client() {
                 <button
                     type="submit"
                     disabled={!answer.trim() || submitting}
-                    className="absolute right-2 top-2 bottom-2 px-6 bg-green-600/20 text-green-500 rounded-sm font-bold font-mono text-xs tracking-widest hover:bg-green-600/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 border border-green-500/30 uppercase"
+                    className="absolute right-2 top-2 bottom-2 px-6 bg-green-600 text-white rounded-sm font-black font-mono text-xs tracking-[0.2em] hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 border border-green-400/30 uppercase shadow-[0_0_15px_rgba(34,197,94,0.3)]"
                 >
-                    {submitting ? 'DECRYPTING...' : 'EXECUTE'}
+                    {submitting ? 'BYPASSING...' : 'INITIATE_BREACH'}
                 </button>
             </form>
         </div>

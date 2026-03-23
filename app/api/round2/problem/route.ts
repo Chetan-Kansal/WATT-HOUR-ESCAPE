@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { canAccessRound } from '@/lib/roundLogic'
+import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
+import { obfuscateCode } from '@/lib/round2/obfuscate'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
     try {
@@ -12,38 +16,58 @@ export async function GET(req: NextRequest) {
         if (!canAccess) return NextResponse.json({ error: 'Round 1 not yet completed' }, { status: 403 })
 
         const admin = createSupabaseAdmin()
+        const { data: team } = await admin.from('teams').select('role').eq('id', user.id).single()
+        const isAdmin = team?.role === 'admin'
 
-        // Get a random active debug problem
-        const { data: problems } = await admin
-            .from('debug_problems')
-            .select('id, title, problem_text, code_snippet, language, test_cases')
-            .eq('is_active', true)
+        // Get player progress
+        const { data: progress, error: progError } = await admin
+            .from('progress')
+            .select('round2_problem_index, round2_attempts, round2_completed')
+            .eq('team_id', user.id)
+            .single()
 
-        if (!problems || problems.length === 0) {
-            return NextResponse.json({ error: 'No problems available' }, { status: 500 })
+        if (progError) {
+            console.error("Error fetching progress:", progError)
+            return NextResponse.json({ error: 'Failed to fetch progress' }, { status: 500 })
         }
 
-        const problem = problems[Math.floor(Math.random() * problems.length)]
+        const currentIndex = progress?.round2_problem_index ?? 0
+        const attemptsMap = (progress?.round2_attempts as Record<string, number>) || {}
 
-        // Get current attempt count
-        const { data: log } = await admin
-            .from('submission_log')
-            .select('attempt_count')
-            .eq('team_id', user.id)
-            .eq('round', 2)
-            .single()
+        // Admin support: Allow overriding index via query param if requester is admin
+        const urlIndex = req.nextUrl.searchParams.get('index')
+        const targetIndex = (isAdmin && urlIndex !== null) ? parseInt(urlIndex) : currentIndex
+
+        if (targetIndex >= ROUND2_PROBLEMS.length) {
+            return NextResponse.json({
+                completed: true,
+                message: "All problems completed"
+            })
+        }
+
+        const problem = ROUND2_PROBLEMS[targetIndex]
+        const attemptsUsed = attemptsMap[targetIndex.toString()] || 0
+
+        // Obfuscate code: remove BUG comments
+        const obfuscatedSnippet = {
+            python: obfuscateCode(problem.brokenCode.python, 'python'),
+            javascript: obfuscateCode(problem.brokenCode.javascript, 'javascript')
+        }
 
         return NextResponse.json({
             id: problem.id,
             title: problem.title,
-            problem_text: problem.problem_text,
-            code_snippet: problem.code_snippet,
-            language: problem.language,
-            test_cases: problem.test_cases,
-            attempts_used: log?.attempt_count ?? 0,
+            problem_text: problem.description,
+            code_snippet: obfuscatedSnippet,
+            expected_behavior: problem.expectedBehavior,
+            attempts_used: attemptsUsed,
             max_attempts: 10,
+            current_problem_index: targetIndex,
+            total_problems: ROUND2_PROBLEMS.length,
+            is_admin: isAdmin
         })
-    } catch {
+    } catch (e) {
+        console.error(e)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

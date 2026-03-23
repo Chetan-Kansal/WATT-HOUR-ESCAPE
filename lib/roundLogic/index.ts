@@ -2,16 +2,19 @@ import { createSupabaseAdmin } from '@/lib/supabase/server'
 
 // ── Check if a team can access a given round ─────────────────────────────────
 export async function canAccessRound(teamId: string, round: number): Promise<boolean> {
-    if (round === 1) return true // Round 1 always accessible after event starts
-
     const admin = createSupabaseAdmin()
     const { data: team } = await admin
         .from('teams')
-        .select('current_round, status, start_time')
+        .select('current_round, status, start_time, role')
         .eq('id', teamId)
         .single()
 
-    if (!team || !team.start_time || team.status === 'registered') return false
+    if (!team) return false
+    if (team.role === 'admin') return true // Master Admin Bypass
+
+    if (round === 1) return true // Round 1 always accessible after event starts
+
+    if (!team.start_time || team.status === 'registered') return false
     if (team.status === 'disqualified') return false
 
     // current_round tracks highest COMPLETED round
@@ -25,9 +28,9 @@ export async function completeRound(teamId: string, round: number): Promise<void
     const now = new Date().toISOString()
 
     const roundTimeField = `round${round}_time` as
-        'round1_time' | 'round2_time' | 'round3_time' | 'round4_time' | 'round5_time'
+        'round1_time' | 'round2_time' | 'round3_time' | 'round4_time' | 'round5_time' | 'round6_time' | 'round7_time' | 'round8_time' | 'round9_time' | 'round10_time'
     const roundCompletedField = `round${round}_completed` as
-        'round1_completed' | 'round2_completed' | 'round3_completed' | 'round4_completed' | 'round5_completed'
+        'round1_completed' | 'round2_completed' | 'round3_completed' | 'round4_completed' | 'round5_completed' | 'round6_completed' | 'round7_completed' | 'round8_completed' | 'round9_completed' | 'round10_completed'
 
     // Update progress table
     await admin
@@ -51,8 +54,19 @@ export async function completeRound(teamId: string, round: number): Promise<void
 export async function logSubmissionAttempt(
     teamId: string,
     round: number
-): Promise<{ count: number; blocked: boolean; reason?: 'cooldown' | 'limit' }> {
+): Promise<{ count: number; blocked: boolean; reason?: 'cooldown' | 'limit'; remaining?: number }> {
     const admin = createSupabaseAdmin()
+
+    // Fetch team to check role (Admins have no limits)
+    const { data: team } = await admin
+        .from('teams')
+        .select('role')
+        .eq('id', teamId)
+        .single()
+
+    if (team?.role === 'admin') {
+        return { count: 0, blocked: false }
+    }
 
     const { data: existing } = await admin
         .from('submission_log')
@@ -61,17 +75,20 @@ export async function logSubmissionAttempt(
         .eq('round', round)
         .single()
 
-    const MAX_ATTEMPTS = round === 2 ? 15 : 20
+    const MAX_ATTEMPTS = round === 1 ? 50 : round === 2 ? 15 : 20
     const COOLDOWN_SECONDS = 10
-    const RESET_MINUTES = 60 // Usually we might reset after some time, let's just make it never reset or reset if they wait long enough. They asked for max 15 submissions.
-    // Actually the user requirements say: "Maximum 15 submissions". It doesn't say it resets. So we can just enforce the limit strictly.
 
     if (existing) {
         const lastAttempt = new Date(existing.last_attempt_at)
         const secondsSinceLastAttempt = (Date.now() - lastAttempt.getTime()) / 1000
 
         if (secondsSinceLastAttempt < COOLDOWN_SECONDS) {
-            return { count: existing.attempt_count, blocked: true, reason: 'cooldown' }
+            return { 
+                count: existing.attempt_count, 
+                blocked: true, 
+                reason: 'cooldown',
+                remaining: Math.ceil(COOLDOWN_SECONDS - secondsSinceLastAttempt)
+            }
         }
 
         const newCount = existing.attempt_count + 1

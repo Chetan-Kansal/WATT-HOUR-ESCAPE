@@ -14,6 +14,7 @@ export interface Database {
                     end_time: string | null
                     total_time: number | null
                     status: 'registered' | 'active' | 'completed' | 'disqualified'
+                    role: 'team' | 'admin'
                     created_at: string
                 }
                 Insert: {
@@ -49,14 +50,26 @@ export interface Database {
                     round3_completed: boolean
                     round4_completed: boolean
                     round5_completed: boolean
+                    round6_completed: boolean
+                    round7_completed: boolean
+                    round8_completed: boolean
+                    round9_completed: boolean
+                    round10_completed: boolean
                     round1_time: string | null
                     round2_time: string | null
                     round3_time: string | null
                     round4_time: string | null
                     round5_time: string | null
+                    round6_time: string | null
+                    round7_time: string | null
+                    round8_time: string | null
+                    round9_time: string | null
+                    round10_time: string | null
                     quiz_streak: number
                     quiz_questions_seen: string[]
                     debug_attempts: number
+                    round2_problem_index: number
+                    round2_attempts: Json
                     updated_at: string
                 }
                 Insert: {
@@ -67,14 +80,26 @@ export interface Database {
                     round3_completed?: boolean
                     round4_completed?: boolean
                     round5_completed?: boolean
+                    round6_completed?: boolean
+                    round7_completed?: boolean
+                    round8_completed?: boolean
+                    round9_completed?: boolean
+                    round10_completed?: boolean
                     round1_time?: string | null
                     round2_time?: string | null
                     round3_time?: string | null
                     round4_time?: string | null
                     round5_time?: string | null
+                    round6_time?: string | null
+                    round7_time?: string | null
+                    round8_time?: string | null
+                    round9_time?: string | null
+                    round10_time?: string | null
                     quiz_streak?: number
                     quiz_questions_seen?: string[]
                     debug_attempts?: number
+                    round2_problem_index?: number
+                    round2_attempts?: Json
                     updated_at?: string
                 }
                 Update: {
@@ -84,14 +109,26 @@ export interface Database {
                     round3_completed?: boolean
                     round4_completed?: boolean
                     round5_completed?: boolean
+                    round6_completed?: boolean
+                    round7_completed?: boolean
+                    round8_completed?: boolean
+                    round9_completed?: boolean
+                    round10_completed?: boolean
                     round1_time?: string | null
                     round2_time?: string | null
                     round3_time?: string | null
                     round4_time?: string | null
                     round5_time?: string | null
+                    round6_time?: string | null
+                    round7_time?: string | null
+                    round8_time?: string | null
+                    round9_time?: string | null
+                    round10_time?: string | null
                     quiz_streak?: number
                     quiz_questions_seen?: string[]
                     debug_attempts?: number
+                    round2_problem_index?: number
+                    round2_attempts?: Json
                     updated_at?: string
                 }
                 Relationships: []

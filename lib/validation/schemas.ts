@@ -20,15 +20,21 @@ export const Round1SubmitSchema = z.object({
 
 // ── Round 2 ──────────────────────────────────────────────────────────────────
 export const Round2SubmitSchema = z.object({
-    problem_id: z.string().uuid(),
+    problem_id: z.number(),
     code: z.string().min(1, 'Code cannot be empty').max(10000, 'Code too long'),
-    language: z.enum(['python', 'javascript', 'cpp', 'java', 'c']).default('python'),
+    language: z.string(),
+})
+
+// ── Round 4 ──────────────────────────────────────────────────────────────────
+export const Round4SubmitSchema = z.object({
+    score: z.number().min(0),
 })
 
 // ── Round 3 ──────────────────────────────────────────────────────────────────
 export const Round3SubmitSchema = z.object({
     problem_id: z.string().uuid(),
-    selected_option: z.enum(['A', 'B', 'C', 'D']),
+    success: z.boolean().optional(),
+    selected_option: z.enum(['A', 'B', 'C', 'D']).optional(),
 })
 
 // ── Round 5 ──────────────────────────────────────────────────────────────────
@@ -58,4 +64,5 @@ export type LoginInput = z.infer<typeof LoginSchema>
 export type Round1SubmitInput = z.infer<typeof Round1SubmitSchema>
 export type Round2SubmitInput = z.infer<typeof Round2SubmitSchema>
 export type Round3SubmitInput = z.infer<typeof Round3SubmitSchema>
+export type Round4SubmitInput = z.infer<typeof Round4SubmitSchema>
 export type Round5SubmitInput = z.infer<typeof Round5SubmitSchema>

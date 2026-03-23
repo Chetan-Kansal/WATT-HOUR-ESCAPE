@@ -59,79 +59,79 @@ async function seedCompetitionData() {
     console.log('📝 Seeding Round 1 - Quiz Questions...');
     const round1Questions = [
       {
-        question: "What is the time complexity of binary search?",
-        option_a: "O(n)", option_b: "O(log n)", option_c: "O(n log n)", option_d: "O(1)",
+        question: "What is the 'Ferranti Effect' in power systems?",
+        option_a: "Voltage decrease at receiving end", option_b: "Voltage rise at receiving end under light load", option_c: "Frequency instability", option_d: "Transformer core saturation",
+        correct_option: "B", category: "energy_systems", difficulty: "hard"
+      },
+      {
+        question: "The 'Duck Curve' in solar management refers to:",
+        option_a: "Panel tilt angle", option_b: "Net load imbalance during sunset", option_c: "Efficiency of thin-film cells", option_d: "Grid frequency oscillations",
+        correct_option: "B", category: "energy_systems", difficulty: "hard"
+      },
+      {
+        question: "In a Delta connection, what is the relation between Line and Phase voltage?",
+        option_a: "VL = VP", option_b: "VL = √3 * VP", option_c: "VL = VP / √3", option_d: "VL = 3 * VP",
+        correct_option: "A", category: "energy_systems", difficulty: "hard"
+      },
+      {
+        question: "Which guarantee is NOT part of the CAP theorem?",
+        option_a: "Consistency", option_b: "Availability", option_c: "Partition Tolerance", option_d: "Durability",
+        correct_option: "D", category: "cs_fundamentals", difficulty: "hard"
+      },
+      {
+        question: "What is the purpose of heartbeats in Raft consensus?",
+        option_a: "Clock sync", option_b: "Maintain leadership authority", option_c: "Memory cleanup", option_d: "User auth",
+        correct_option: "B", category: "cs_fundamentals", difficulty: "hard"
+      },
+      {
+        question: "Which data structure implements a Priority Queue in O(log n)?",
+        option_a: "Linked List", option_b: "Binary Heap", option_c: "Hash Map", option_d: "Stack",
         correct_option: "B", category: "programming", difficulty: "medium"
       },
       {
-        question: "Which data structure uses FIFO?",
-        option_a: "Stack", option_b: "Queue", option_c: "Tree", option_d: "Graph",
-        correct_option: "B", category: "programming", difficulty: "easy"
+        question: "Time complexity to build a heap from n elements?",
+        option_a: "O(log n)", option_b: "O(n)", option_c: "O(n log n)", option_d: "O(n²)",
+        correct_option: "B", category: "programming", difficulty: "hard"
       },
       {
-        question: "Which HTTP status means success?",
-        option_a: "404", option_b: "200", option_c: "500", option_d: "301",
-        correct_option: "B", category: "cs_fundamentals", difficulty: "easy"
+        question: "A sound logical system ensures that:",
+        option_a: "All provable statements are true", option_b: "All true statements are provable", option_c: "The system is complete", option_d: "No axioms are redundant",
+        correct_option: "A", category: "logic", difficulty: "hard"
       },
       {
-        question: "Which keyword prevents inheritance in Java?",
-        option_a: "const", option_b: "static", option_c: "final", option_d: "sealed",
-        correct_option: "C", category: "programming", difficulty: "medium"
+        question: "What is the minimum weighings to find 1 heavy coin out of 8?",
+        option_a: "1", option_b: "2", option_c: "3", option_d: "4",
+        correct_option: "B", category: "logic", difficulty: "hard"
       },
       {
-        question: "Which is NOT a programming paradigm?",
-        option_a: "Object oriented", option_b: "Functional", option_c: "Procedural", option_d: "Relational",
-        correct_option: "D", category: "programming", difficulty: "easy"
+        question: "Which is a non-linear load causing harmonics?",
+        option_a: "Incandescent bulb", option_b: "VFD (Variable Frequency Drive)", option_c: "Heater", option_d: "Transformer",
+        correct_option: "B", category: "energy_systems", difficulty: "hard"
       },
       {
-        question: "Which sorting algorithm is stable?",
-        option_a: "Quick sort", option_b: "Heap sort", option_c: "Merge sort", option_d: "Selection sort",
-        correct_option: "C", category: "programming", difficulty: "medium"
+        question: "The average time complexity of Merge Sort is:",
+        option_a: "O(n)", option_b: "O(n log n)", option_c: "O(n²)", option_d: "O(log n)",
+        correct_option: "B", category: "programming", difficulty: "medium"
       },
       {
-        question: "Which protocol is used for secure web?",
-        option_a: "HTTP", option_b: "FTP", option_c: "HTTPS", option_d: "SMTP",
-        correct_option: "C", category: "cs_fundamentals", difficulty: "easy"
-      },
-      {
-        question: "Which structure supports LIFO?",
-        option_a: "Queue", option_b: "Stack", option_c: "Array", option_d: "Linked list",
-        correct_option: "B", category: "programming", difficulty: "easy"
-      },
-      {
-        question: "Which SQL command removes table?",
-        option_a: "DELETE", option_b: "REMOVE", option_c: "DROP", option_d: "CLEAR",
-        correct_option: "C", category: "cs_fundamentals", difficulty: "medium"
-      },
-      {
-        question: "Which is fastest lookup?",
-        option_a: "Array", option_b: "HashMap", option_c: "LinkedList", option_d: "Queue",
-        correct_option: "B", category: "programming", difficulty: "easy"
-      },
-      {
-        question: "Which OS scheduling is preemptive?",
-        option_a: "FCFS", option_b: "Round Robin", option_c: "FIFO", option_d: "None",
+        question: "Which layer of OSI model handles IP addressing?",
+        option_a: "Data Link", option_b: "Network", option_c: "Transport", option_d: "Session",
         correct_option: "B", category: "cs_fundamentals", difficulty: "medium"
       },
       {
-        question: "Which language runs in browser?",
-        option_a: "Python", option_b: "C++", option_c: "JavaScript", option_d: "Rust",
-        correct_option: "C", category: "programming", difficulty: "easy"
+        question: "What does ACID stand for in databases?",
+        option_a: "Atomicity, Consistency, Isolation, Durability", option_b: "Array, Collection, Index, Data", option_c: "Access, Control, Integration, Distribution", option_d: "Auto, Create, Insert, Delete",
+        correct_option: "A", category: "cs_fundamentals", difficulty: "easy"
       },
       {
-        question: "Which is primary key property?",
-        option_a: "Duplicate allowed", option_b: "Unique", option_c: "Optional", option_d: "Nullable",
-        correct_option: "B", category: "cs_fundamentals", difficulty: "easy"
+        question: "In Python, which keyword creates a generator?",
+        option_a: "return", option_b: "yield", option_c: "break", option_d: "next",
+        correct_option: "B", category: "programming", difficulty: "medium"
       },
       {
-        question: "Which is NoSQL?",
-        option_a: "MySQL", option_b: "Postgres", option_c: "MongoDB", option_d: "Oracle",
-        correct_option: "C", category: "cs_fundamentals", difficulty: "easy"
-      },
-      {
-        question: "Which layer handles routing?",
-        option_a: "Transport", option_b: "Network", option_c: "Application", option_d: "Session",
-        correct_option: "B", category: "cs_fundamentals", difficulty: "hard"
+        question: "What is the binary value of decimal 13?",
+        option_a: "1100", option_b: "1101", option_c: "1011", option_d: "1111",
+        correct_option: "B", category: "logic", difficulty: "easy"
       }
     ];
 

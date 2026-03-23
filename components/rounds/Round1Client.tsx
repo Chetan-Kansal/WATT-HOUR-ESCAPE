@@ -98,20 +98,30 @@ export default function Round1Client() {
     return (
         <div className="max-w-2xl mx-auto space-y-8">
             {/* Header info */}
-            <div className="text-center space-y-2">
-                <h2 className="text-2xl font-bold text-foreground font-mono tracking-tight">Console.log(Quiz)</h2>
-                <p className="text-muted-foreground text-sm">Output 5 consecutive truths to compile</p>
-            </div>
+            <motion.div 
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-center space-y-2"
+            >
+                <h2 className="text-3xl font-black text-white font-mono tracking-tighter uppercase italic bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                    Neon Surge Quiz
+                </h2>
+                <div className="h-0.5 w-24 bg-blue-500 mx-auto rounded-full shadow-[0_0_10px_#3b82f6]" />
+                <p className="text-blue-400/70 text-[10px] font-mono uppercase tracking-[0.2em]">Sequence Verification Protocol 1.0.4</p>
+            </motion.div>
 
             {/* Tension Meter / Power Nodes */}
             <motion.div 
-                className="glass-card rounded-2xl p-6 flex flex-col items-center gap-5 border"
-                style={{ borderColor: streak >= 2 ? `${getTensionColor()}40` : 'transparent', boxShadow: streak >= 2 ? getTensionGlow() : 'none' }}
+                className="glass-card rounded-2xl p-6 flex flex-col items-center gap-5 border border-blue-500/20 bg-blue-500/5 backdrop-blur-md relative overflow-hidden"
+                style={{ boxShadow: streak >= 2 ? getTensionGlow() : '0 8px 32px rgba(0,0,0,0.3)' }}
                 animate={tensionPulse}
             >
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground" style={{ color: streak >= 3 ? getTensionColor() : undefined }}>
-                    <Zap size={14} className={streak >= 4 ? 'animate-pulse' : ''} /> 
-                    {streak === 5 ? 'System Overload: Success' : streak === 4 ? 'Critical Pressure' : 'Sequence Matrix'}
+                {/* Background scanning line effect */}
+                <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(transparent_0%,rgba(59,130,246,0.5)_50%,transparent_100%)] bg-[length:100%_4px] animate-scanline" />
+
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/80" style={{ color: streak >= 3 ? getTensionColor() : undefined }}>
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] animate-pulse" />
+                    {streak === 5 ? 'COMPILATION SUCCESS' : streak === 4 ? 'SYSTEM OVERLOAD' : 'NEURAL LINK STABILITY'}
                 </div>
                 
                 <div className="flex gap-2 sm:gap-4 w-full justify-center">
@@ -176,9 +186,9 @@ export default function Round1Client() {
                         animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                         exit={{ opacity: 0, y: -20, filter: 'blur(4px)' }}
                         transition={{ duration: 0.4 }}
-                        className={`glass-card rounded-2xl p-6 md:p-8 space-y-6 transition-all duration-300 relative overflow-hidden
-                            ${lastResult === 'correct' ? 'border-green-500/50 bg-green-500/5' : 'border-border/50'}
-                            ${lastResult === 'wrong' ? 'border-red-500/50 bg-red-500/5 animate-shake' : ''}
+                        className={`glass-card rounded-2xl p-6 md:p-8 space-y-6 transition-all duration-500 relative overflow-hidden border
+                            ${lastResult === 'correct' ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.2)] bg-green-500/5' : 'border-blue-500/30 bg-black/40'}
+                            ${lastResult === 'wrong' ? 'border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.2)] bg-red-500/5' : ''}
                         `}
                     >
                         {/* Terminal header decoration */}

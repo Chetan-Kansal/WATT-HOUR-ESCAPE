@@ -15,8 +15,13 @@ export async function POST(req: NextRequest) {
         const canAccess = await canAccessRound(user.id, 5)
         if (!canAccess) return NextResponse.json({ error: 'Round 4 not completed' }, { status: 403 })
 
-        const { blocked } = await logSubmissionAttempt(user.id, 5)
-        if (blocked) return NextResponse.json({ error: 'Too many attempts. Wait 1 minute.' }, { status: 429 })
+        const { blocked, reason, remaining } = await logSubmissionAttempt(user.id, 5)
+        if (blocked) {
+            const message = reason === 'cooldown' 
+                ? `Too fast! Please wait ${remaining} seconds.` 
+                : 'Maximum attempts reached for this round.'
+            return NextResponse.json({ error: message }, { status: 429 })
+        }
 
         await logIPAddress(user.id, ip, '/api/round5/submit')
 
@@ -81,21 +86,11 @@ export async function POST(req: NextRequest) {
 
         await admin.from('teams').update({ current_round: 5 }).eq('id', user.id)
 
-        // Get final rank from leaderboard view
-        const { data: leaderboard } = await admin
-            .from('leaderboard' as never)
-            .select('rank')
-            .eq('id', user.id)
-            .single()
-
-        const finalRank = (leaderboard as { rank?: number } | null)?.rank ?? null
-
         await logAuditSubmission(user.id, 5, `Submitted final key: ${key}. Passed: true`, ip)
 
         return NextResponse.json({
             passed: true,
             total_time: totalTime,
-            final_rank: finalRank,
             message: '🎉 Congratulations! You have completed all 5 rounds!',
         })
     } catch {

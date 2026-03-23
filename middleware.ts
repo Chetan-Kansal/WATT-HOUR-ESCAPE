@@ -38,6 +38,9 @@ export async function middleware(request: NextRequest) {
 
     // ── Redirect unauthenticated users ─────────────────────────────────────────
     if (!user && !isPublic) {
+        if (pathname.startsWith('/api')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
         const url = request.nextUrl.clone()
         url.pathname = '/login'
         url.searchParams.set('redirect', pathname)
@@ -52,35 +55,37 @@ export async function middleware(request: NextRequest) {
     }
 
     // ── Round access control — enforce sequential completion ──────────────────
-    if (user && pathname.match(/^\/round[2-5]/)) {
-        const roundMatch = pathname.match(/^\/round(\d)/)
-        const requestedRound = roundMatch ? parseInt(roundMatch[1]) : null
+    if (user && (pathname.match(/^\/round([1-9]|10)/) || pathname.startsWith('/admin'))) {
+        // Check team data from DB (role and progression)
+        const { data: team } = await supabase
+            .from('teams')
+            .select('current_round, status, start_time, role')
+            .eq('id', user.id)
+            .single()
 
-        if (requestedRound && requestedRound > 1) {
-            // Check current_round from DB
-            const { data: team } = await supabase
-                .from('teams')
-                .select('current_round, status, start_time')
-                .eq('id', user.id)
-                .single()
+        const isAdmin = team?.role === 'admin'
 
-            if (!team || !team.start_time || team.status === 'registered') {
-                return NextResponse.redirect(new URL('/dashboard', request.url))
-            }
+        // Admin bypass for round access
+        if (pathname.match(/^\/round([1-9]|10)/)) {
+            const roundMatch = pathname.match(/^\/round(\d+)/)
+            const requestedRound = roundMatch ? parseInt(roundMatch[1]) : null
 
-            // Must have completed previous round
-            if (team.current_round < requestedRound - 1) {
-                return NextResponse.redirect(new URL('/dashboard', request.url))
+            if (!isAdmin && requestedRound && requestedRound > 1) {
+                if (!team || !team.start_time || team.status === 'registered') {
+                    return NextResponse.redirect(new URL('/dashboard', request.url))
+                }
+                // Must have completed previous round
+                if (team.current_round < requestedRound - 1) {
+                    return NextResponse.redirect(new URL('/dashboard', request.url))
+                }
             }
         }
-    }
 
-    // ── Admin protection ──────────────────────────────────────────────────────
-    if (pathname.startsWith('/admin') && !pathname.startsWith('/api/admin')) {
-        // Admin routes require a special admin email (configurable)
-        const adminEmail = process.env.ADMIN_EMAIL || 'admin@gdgieee.com'
-        if (!user || user.email !== adminEmail) {
-            return NextResponse.redirect(new URL('/dashboard', request.url))
+        // Admin protection for /admin routes
+        if (pathname.startsWith('/admin') && !pathname.startsWith('/api/admin')) {
+            if (!isAdmin) {
+                return NextResponse.redirect(new URL('/dashboard', request.url))
+            }
         }
     }
 

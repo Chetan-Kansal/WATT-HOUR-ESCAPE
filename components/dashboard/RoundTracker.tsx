@@ -24,8 +24,22 @@ export default function RoundTracker({ rounds, currentRound, isEventStarted }: R
                 const isActive = isEventStarted && currentRound === round.number - 1 && !isCompleted
                 const isLocked = !isEventStarted || (currentRound < round.number - 1 && !isCompleted)
 
+                const colors = [
+                    'border-blue-500/30 text-blue-400',       // R1
+                    'border-green-500/30 text-green-400',     // R2
+                    'border-amber-500/30 text-amber-400',     // R3
+                    'border-fuchsia-500/30 text-fuchsia-400', // R4
+                    'border-red-500/30 text-red-400',          // R5
+                    'border-cyan-500/30 text-cyan-400',       // R6
+                    'border-orange-500/30 text-orange-400',    // R7
+                    'border-lime-500/30 text-lime-400',       // R8
+                    'border-pink-500/30 text-pink-400',       // R9
+                    'border-violet-500/30 text-violet-400'    // R10
+                ]
+                const activeColor = colors[index] || 'border-primary/40 text-primary'
+
                 let statusIcon
-                if (isCompleted) statusIcon = <CheckCircle2 size={20} className="text-[#34A853]" />
+                if (isCompleted) statusIcon = <CheckCircle2 size={20} className="text-green-500" />
                 else if (isActive) statusIcon = (
                     <div className="relative">
                         <Circle size={20} className="text-primary" />
@@ -41,41 +55,47 @@ export default function RoundTracker({ rounds, currentRound, isEventStarted }: R
                         transition={{ delay: index * 0.08, duration: 0.3 }}
                         className={`
               flex items-center gap-4 p-4 rounded-xl border transition-all duration-300
-              ${isCompleted ? 'border-[#34A853]/30 bg-[#34A853]/5' : ''}
-              ${isActive ? 'border-primary/40 bg-primary/5 shadow-glow-blue' : ''}
+              ${isCompleted ? 'border-green-500/20 bg-green-500/5 shadow-[0_0_15px_rgba(34,197,94,0.05)]' : ''}
+              ${isActive ? `bg-primary/5 shadow-glow-blue ${activeColor.split(' ')[0]}` : ''}
               ${isLocked ? 'border-border/50 opacity-50' : ''}
               ${!isCompleted && !isActive && !isLocked ? 'border-border hover:border-primary/30 hover:bg-muted/50' : ''}
             `}
                     >
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full glass border border-border flex items-center justify-center">
-                            <span className="text-xs font-bold text-muted-foreground">{round.number}</span>
-                        </div>
+                        <motion.div 
+                            whileHover={{ scale: 1.1 }}
+                            className={`flex-shrink-0 w-8 h-8 rounded-full glass border flex items-center justify-center transition-shadow duration-500 ${isActive ? `${activeColor.split(' ')[0]} shadow-[0_0_15px_rgba(59,130,246,0.3)]` : 'border-border'}`}
+                        >
+                            <span className={`text-xs font-black ${isActive ? activeColor.split(' ')[1] : 'text-muted-foreground'}`}>{round.number}</span>
+                        </motion.div>
 
                         {statusIcon}
 
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                                <span className={`text-xs font-semibold uppercase tracking-widest ${isCompleted ? 'text-[#34A853]' :
-                                        isActive ? 'text-primary' :
-                                            'text-muted-foreground'
-                                    }`}>
+                                <span className={`text-[10px] font-mono font-bold uppercase tracking-widest 
+                                    ${isCompleted ? 'text-green-400' : isActive ? activeColor.split(' ')[1] : 'text-muted-foreground'}
+                                `}>
                                     ROUND {round.number}
                                 </span>
                                 {isActive && (
-                                    <span className="text-xs bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full animate-pulse">
-                                        ACTIVE
-                                    </span>
+                                    <motion.span 
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        className={`text-[10px] bg-primary/20 border-primary/50 border px-2 py-0.5 rounded-full animate-pulse font-mono font-black tracking-tighter ${activeColor.split(' ')[1]}`}
+                                    >
+                                        MISSION_ACTIVE
+                                    </motion.span>
                                 )}
                                 {isCompleted && (
-                                    <span className="text-xs bg-[#34A853]/20 text-[#34A853] border border-[#34A853]/30 px-2 py-0.5 rounded-full">
-                                        ✓ DONE
+                                    <span className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full font-mono">
+                                        SECURED
                                     </span>
                                 )}
                                 {isLocked && (
-                                    <span className="text-xs text-muted-foreground/60">LOCKED</span>
+                                    <span className="text-[10px] text-muted-foreground/60 font-mono tracking-tighter">ENCRYPTED</span>
                                 )}
                             </div>
-                            <p className="text-sm font-medium text-foreground/90 mt-0.5">{round.title}</p>
+                            <p className="text-sm font-medium text-foreground/90 mt-0.5 font-sans">{round.title}</p>
                         </div>
 
                         {(isActive || (!isCompleted && !isLocked)) && (

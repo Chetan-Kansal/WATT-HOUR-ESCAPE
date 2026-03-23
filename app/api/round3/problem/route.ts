@@ -23,11 +23,22 @@ export async function GET(req: NextRequest) {
 
         const problem = problems[Math.floor(Math.random() * problems.length)]
 
+        let options = problem.diagram_options
+        console.log(`[Round 3 API] problem_id: ${problem.id}, options type: ${typeof options}`)
+        
+        if (typeof options === 'string') {
+            try {
+                options = JSON.parse(options)
+            } catch (e) {
+                console.error("[Round 3 API] Failed to parse diagram_options:", e)
+            }
+        }
+
         return NextResponse.json({
             id: problem.id,
             title: problem.title,
             problem: problem.problem,
-            diagram_options: problem.diagram_options,
+            diagram_options: options,
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

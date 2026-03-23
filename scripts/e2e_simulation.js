@@ -40,7 +40,7 @@ async function simulateJourney() {
      round1_time: now
   }).eq('team_id', team.id);
   
-  await supabase.from('teams').update({ current_round: 1, status: 'active' }).eq('id', team.id);
+  await supabase.from('teams').update({ current_round: 0, status: 'active' }).eq('id', team.id);
 
   // 3. Fake an audit submission to ensure RLS bypass works for the service key
   console.log("3. Writing an audit log...");

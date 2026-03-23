@@ -14,8 +14,13 @@ export async function POST(req: NextRequest) {
         const canAccess = await canAccessRound(user.id, 3)
         if (!canAccess) return NextResponse.json({ error: 'Round 2 not completed' }, { status: 403 })
 
-        const { blocked } = await logSubmissionAttempt(user.id, 3)
-        if (blocked) return NextResponse.json({ error: 'Too many attempts. Wait 1 minute.' }, { status: 429 })
+        const { blocked, reason, remaining } = await logSubmissionAttempt(user.id, 3)
+        if (blocked) {
+            const message = reason === 'cooldown' 
+                ? `Too fast! Please wait ${remaining} seconds.` 
+                : 'Maximum attempts reached for this round.'
+            return NextResponse.json({ error: message }, { status: 429 })
+        }
 
         await logIPAddress(user.id, ip, '/api/round3/submit')
 
@@ -23,7 +28,7 @@ export async function POST(req: NextRequest) {
         const parsed = Round3SubmitSchema.safeParse(body)
         if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
 
-        const { problem_id, selected_option } = parsed.data
+        const { problem_id, selected_option, success } = parsed.data
         const admin = createSupabaseAdmin()
 
         const { data: problem } = await admin
@@ -42,17 +47,21 @@ export async function POST(req: NextRequest) {
 
         if (progress?.round3_completed) return NextResponse.json({ error: 'Round 3 already completed' }, { status: 400 })
 
-        const passed = selected_option === problem.correct_option
+        const passed = success === true || selected_option === problem.correct_option
         if (passed) await completeRound(user.id, 3)
 
-        const resultMessage = passed ? '✓ Correct circuit! Round 3 complete.' : '✗ That\'s not the right circuit. Try again!'
+        const resultMessage = passed ? '✓ Grid Synchronized! Round 3 complete.' : '✗ Grid instability detected. Try again!'
 
-        await logAuditSubmission(user.id, 3, `Selected option ${selected_option} for ${problem.title}. Passed: ${passed}`, ip)
+        await logAuditSubmission(user.id, 3, `Success: ${success}, Option: ${selected_option} for ${problem.title}. Passed: ${passed}`, ip)
+
+        const { data: team } = await admin.from('teams').select('role').eq('id', user.id).single()
+        const isAdmin = team?.role === 'admin'
 
         return NextResponse.json({
             passed,
             explanation: passed ? problem.explanation : null,
             message: resultMessage,
+            is_admin: isAdmin
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

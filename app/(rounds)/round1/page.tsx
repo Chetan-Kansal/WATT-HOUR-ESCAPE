@@ -6,7 +6,7 @@ import Round1Client from '@/components/rounds/Round1Client'
 export default async function Round1Page() {
     const team = await getAuthenticatedTeam()
     if (!team) redirect('/login')
-    if (!team.start_time) redirect('/dashboard')
+    if (!team.start_time && team.role !== 'admin') redirect('/dashboard')
 
     return (
         <RoundLayout
@@ -15,6 +15,8 @@ export default async function Round1Page() {
             startTime={team.start_time}
             isCompleted={team.status === 'completed'}
             totalTime={team.total_time}
+            role={team.role}
+            theme="neon-surge"
         >
             <Round1Client />
         </RoundLayout>

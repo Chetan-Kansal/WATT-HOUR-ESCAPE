@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
             title: image.title,
             image_url: image.image_url,
             threshold: image.similarity_threshold,
-            instructions: 'Study this image carefully. Use any AI image generation tool to create a similar image, then upload your result.',
+            instructions: 'Reverse engineer the target image using AI generation. Your goal is to produce a prompt that generates an image as close to the target as possible. Upload your generated image for neural similarity analysis.',
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
-import { canAccessRound, completeRound, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
+import { Round4SubmitSchema } from '@/lib/validation/schemas'
+import { canAccessRound, completeRound, logSubmissionAttempt, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
 
 export async function POST(req: NextRequest) {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown'
@@ -13,37 +14,25 @@ export async function POST(req: NextRequest) {
         const canAccess = await canAccessRound(user.id, 4)
         if (!canAccess) return NextResponse.json({ error: 'Round 3 not completed' }, { status: 403 })
 
+        const { blocked, reason, remaining } = await logSubmissionAttempt(user.id, 4)
+        if (blocked) {
+            const message = reason === 'cooldown' 
+                ? `Too fast! Please wait ${remaining} seconds.` 
+                : 'Maximum attempts reached for this round.'
+            return NextResponse.json({ error: message }, { status: 429 })
+        }
+
         await logIPAddress(user.id, ip, '/api/round4/submit')
 
-        // Parse multipart form data
-        const formData = await req.formData()
-        const file = formData.get('file') as File | null
-        const imageId = formData.get('image_id') as string | null
+        // Parse JSON body
+        const body = await req.json()
+        const parsed = Round4SubmitSchema.safeParse(body)
+        if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
 
-        if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
-        if (!imageId) return NextResponse.json({ error: 'Missing image_id' }, { status: 400 })
-
-        // Size limit: 5MB
-        if (file.size > 5 * 1024 * 1024) {
-            return NextResponse.json({ error: 'File too large. Maximum size is 5MB.' }, { status: 413 })
-        }
-
-        // Only accept images
-        if (!file.type.startsWith('image/')) {
-            return NextResponse.json({ error: 'Only image files are accepted' }, { status: 400 })
-        }
+        const { score } = parsed.data
+        const MIN_SCORE = 700
 
         const admin = createSupabaseAdmin()
-
-        // Get active image with reference URL (never expose prompt)
-        const { data: imageRound } = await admin
-            .from('image_round')
-            .select('id, image_url, similarity_threshold, title')
-            .eq('id', imageId)
-            .eq('is_active', true)
-            .single()
-
-        if (!imageRound) return NextResponse.json({ error: 'Image round not found' }, { status: 404 })
 
         const { data: progress } = await admin
             .from('progress')
@@ -55,67 +44,28 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Round 4 already completed' }, { status: 400 })
         }
 
-        // Forward to Python CLIP microservice
-        const PYTHON_URL = process.env.PYTHON_SERVICE_URL
-        if (!PYTHON_URL) {
-            // Fallback for development: auto-pass at 0.7 similarity
-            const mockScore = 0.72
-            await logAuditSubmission(user.id, 4, `Dev Mode Mock Submission. Score: ${mockScore}`, ip)
-            return NextResponse.json({
-                similarity_score: mockScore,
-                threshold: imageRound.similarity_threshold,
-                passed: mockScore >= imageRound.similarity_threshold,
-                message: 'Dev mode: CLIP service not configured.',
-            })
-        }
-
-        const clipFormData = new FormData()
-        clipFormData.append('file', file)
-        clipFormData.append('reference_url', imageRound.image_url)
-
-        let clipResult: { similarity: number }
-        try {
-            // Use AbortController for broader compatibility in case AbortSignal.timeout isn't fully supported in all node environments natively
-            const controller = new AbortController()
-            const id = setTimeout(() => controller.abort(), 15000) // 15s max waiting time to prevent UI hang
-
-            const clipRes = await fetch(`${PYTHON_URL}/compare`, {
-                method: 'POST',
-                body: clipFormData,
-                signal: controller.signal,
-            })
-            clearTimeout(id)
-
-            if (!clipRes.ok) throw new Error(`CLIP service error: ${clipRes.status}`)
-            clipResult = await clipRes.json()
-        } catch (e: any) {
-            await logAuditSubmission(user.id, 4, `Failed similarity check (Service Error: ${e.name})`, ip)
-            return NextResponse.json({
-                error: e.name === 'AbortError' 
-                    ? 'Image comparison service timed out. Please try again.' 
-                    : 'Image comparison service unavailable.',
-                details: String(e),
-            }, { status: 503 })
-        }
-
-        const similarityScore = Math.round(clipResult.similarity * 100) / 100
-        const passed = similarityScore >= imageRound.similarity_threshold
+        const passed = score >= MIN_SCORE
 
         if (passed) await completeRound(user.id, 4)
 
         const resultMessage = passed
-            ? '✓ Image similarity passes! Round 4 complete.'
-            : `✗ Similarity: ${Math.round(similarityScore * 100)}%. Need ${Math.round(imageRound.similarity_threshold * 100)}%. Try a more similar image.`
+            ? '✓ Grid synchronized! Round 4 complete.'
+            : `✗ Current sync: ${score}/700. Insufficient power levels.`
 
-        await logAuditSubmission(user.id, 4, `Image Upload for ${imageRound.title}. Score: ${Math.round(similarityScore * 100)}%. Passed: ${passed}`, ip)
+        await logAuditSubmission(user.id, 4, `Power Runner Score: ${score}. Passed: ${passed}`, ip)
+
+        const { data: team } = await admin.from('teams').select('role').eq('id', user.id).single()
+        const isAdmin = team?.role === 'admin'
 
         return NextResponse.json({
-            similarity_score: similarityScore,
-            threshold: imageRound.similarity_threshold,
+            score,
+            threshold: MIN_SCORE,
             passed,
             message: resultMessage,
+            is_admin: isAdmin
         })
-    } catch {
+    } catch (e) {
+        console.error('Round 4 Error:', e)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

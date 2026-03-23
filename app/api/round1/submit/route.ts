@@ -16,12 +16,12 @@ export async function POST(req: NextRequest) {
         if (!canAccess) return NextResponse.json({ error: 'Cannot access this round' }, { status: 403 })
 
         // Rate limiting
-        const { blocked } = await logSubmissionAttempt(user.id, 1)
+        const { blocked, reason, remaining } = await logSubmissionAttempt(user.id, 1)
         if (blocked) {
-            return NextResponse.json(
-                { error: 'Too many attempts. Wait 1 minute.' },
-                { status: 429 }
-            )
+            const message = reason === 'cooldown' 
+                ? `Too fast! Please wait ${remaining} seconds.` 
+                : 'Maximum attempts reached for this round.'
+            return NextResponse.json({ error: message }, { status: 429 })
         }
 
         // Log IP
@@ -64,11 +64,18 @@ export async function POST(req: NextRequest) {
         const currentStreak = progress?.quiz_streak ?? 0
         const newStreak = isCorrect ? currentStreak + 1 : 0
 
-        // Update streak in progress
-        await admin
+        // Update streak in progress using upsert to ensure row exists
+        const { error: streakError } = await admin
             .from('progress')
-            .update({ quiz_streak: newStreak, updated_at: new Date().toISOString() })
-            .eq('team_id', user.id)
+            .upsert({ 
+                team_id: user.id,
+                quiz_streak: newStreak, 
+                updated_at: new Date().toISOString() 
+            } as never, { onConflict: 'team_id' })
+
+        if (streakError) {
+            console.error("Round 1 streak upsert error:", streakError)
+        }
 
         // Check for completion (streak of 5)
         let completed = false

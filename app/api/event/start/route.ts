@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
         await admin.from('teams').update({
             start_time: now,
             status: 'active',
-            current_round: 1,
+            current_round: 0,
         }).eq('id', user.id)
 
         // Ensure progress row exists
@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ success: true, start_time: now })
-    } catch {
+    } catch (e) {
+        console.error("Event Start Error:", e)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

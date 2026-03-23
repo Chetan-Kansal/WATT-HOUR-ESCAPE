@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
         if (!isSuccess) {
             let errorDetail = ""
-            if (!isCorrectLine) errorDetail = "SCAN FAILED: Logic leak not located at selected coordinates."
+            if (!isCorrectLine) errorDetail = `SCAN FAILED: Logic leak not located at selected coordinates. (Selected: ${selected_line + 1}, Expected: ${problem.buggyLineIndex + 1})`
             else if (!isCorrectFix) errorDetail = "REPAIR FAILED: Selected logic module is incompatible with the leak."
 
             return NextResponse.json({

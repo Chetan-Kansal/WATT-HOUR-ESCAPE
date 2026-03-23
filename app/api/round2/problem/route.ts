@@ -18,7 +18,6 @@ export async function GET(req: NextRequest) {
         const { data: team } = await admin.from('teams').select('role').eq('id', user.id).single()
         const isAdmin = team?.role === 'admin'
 
-        // Get player progress
         const { data: progress, error: progError } = await admin
             .from('progress')
             .select('round2_problem_index, round2_attempts, round2_completed')
@@ -32,25 +31,28 @@ export async function GET(req: NextRequest) {
 
         const currentIndex = progress?.round2_problem_index ?? 0
 
-        // Admin support: Allow overriding index via query param if requester is admin
         const urlIndex = req.nextUrl.searchParams.get('index')
         const targetIndex = (isAdmin && urlIndex !== null) ? parseInt(urlIndex) : currentIndex
 
         if (targetIndex >= ROUND2_PROBLEMS.length) {
             return NextResponse.json({
                 completed: true,
-                message: "All problems completed"
+                message: "All reactor cores online"
             })
         }
 
         const problem = ROUND2_PROBLEMS[targetIndex]
 
+        // Return everything EXCEPT correctAnswer
         return NextResponse.json({
             id: problem.id,
+            coreNumber: problem.coreNumber,
             title: problem.title,
+            type: problem.type,
             description: problem.description,
-            codeSnippet: problem.codeSnippet,
-            language: problem.language,
+            displayData: problem.displayData,
+            hint: problem.hint ?? null,
+            choices: problem.choices ?? null,
             current_problem_index: targetIndex,
             total_problems: ROUND2_PROBLEMS.length,
             is_admin: isAdmin

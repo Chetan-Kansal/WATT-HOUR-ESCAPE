@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient, createSupabaseAdmin } from '@/lib/supabase/server'
+import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
+import { Round2SubmitSchema } from '@/lib/validation/schemas'
 import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
-import { Round2SubmitSchema, validationError } from '@/lib/validation/schemas'
+
+export const dynamic = 'force-dynamic'
+
+function validationError(msg: string) {
+    return NextResponse.json({ error: msg }, { status: 400 })
+}
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json()
         const validated = Round2SubmitSchema.safeParse(body)
-        
         if (!validated.success) {
             return validationError(validated.error.errors[0].message)
         }
@@ -24,38 +29,26 @@ export async function POST(req: NextRequest) {
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const admin = createSupabaseAdmin()
-        const { data: team, error: teamError } = await admin.from('teams').select('id, role, last_submission_time').eq('id', user.id).single()
+        const { data: team, error: teamError } = await admin.from('teams').select('id, role').eq('id', user.id).single()
         if (teamError || !team) {
             return NextResponse.json({ error: 'Failed to verify identity' }, { status: 500 })
         }
 
-        // 3 second cooldown for terminal typing
-        const now = Date.now()
-        const lastSub = team.last_submission_time ? new Date(team.last_submission_time).getTime() : 0
-        if (now - lastSub < 3000) {
-            return NextResponse.json({ error: 'System cooling down. Please wait 3 seconds.' }, { status: 429 })
-        }
+        // Simple string comparison — the entire validation logic
+        const isCorrect = answer.trim().toLowerCase() === problem.correctAnswer.toLowerCase()
 
-        const isSuccess = answer.trim().toLowerCase() === problem.expectedAnswer.toLowerCase()
-
-        // Update submission timestamp
-        await admin
-            .from('teams')
-            .update({ last_submission_time: new Date().toISOString() } as never)
-            .eq('id', team.id)
-
-        if (!isSuccess) {
+        if (!isCorrect) {
             return NextResponse.json({
                 success: false,
-                message: 'OVERRIDE FAILED',
-                details: "SYNTAX_ERROR: The provided keyword does not clear the anomaly."
+                message: 'CORE REJECTED',
+                details: `Incorrect value. The reactor core did not accept "${answer.trim()}". Re-analyze the puzzle.`
             })
         }
 
-        // Handle progression
+        // --- Correct answer: handle progression ---
         const { data: progress } = await admin.from('progress').select('round2_problem_index').eq('team_id', user.id).single()
         const currentIndex = progress?.round2_problem_index ?? 0
-        
+
         let nextIndex = currentIndex
         if (problem_id === currentIndex) {
             nextIndex = currentIndex + 1
@@ -63,24 +56,22 @@ export async function POST(req: NextRequest) {
 
         const isRoundComplete = nextIndex >= ROUND2_PROBLEMS.length
 
-        // Update progress in DB
-        const updateData: any = {
-            round2_problem_index: nextIndex
-        }
+        const updateData: any = { round2_problem_index: nextIndex }
         if (isRoundComplete) {
             updateData.round2_completed = true
         }
 
         await admin.from('progress').update(updateData as never).eq('team_id', user.id)
 
-        // If round complete, move to Round 3
         if (isRoundComplete) {
             await admin.from('teams').update({ current_round: 3 } as never).eq('id', user.id)
         }
 
         return NextResponse.json({
             success: true,
-            message: isRoundComplete ? 'ACCESS GRANTED: ROUND 2 COMPLETE' : 'LOGIC REPAIRED: MOVING TO NEXT SECTOR',
+            message: isRoundComplete
+                ? '⚡ ALL CORES ONLINE — ROUND 2 COMPLETE'
+                : `⚡ CORE ${problem.coreNumber} ONLINE — Moving to next core`,
             nextLevel: isRoundComplete ? null : nextIndex,
             isRoundComplete
         })

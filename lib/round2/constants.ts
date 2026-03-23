@@ -1,91 +1,70 @@
-export interface TerminalProblem {
+export interface ReactorPuzzle {
     id: number;
+    coreNumber: number;
     title: string;
+    type: 'debug' | 'logic_gate' | 'binary' | 'anagram' | 'cipher' | 'base_convert' | 'sequence';
     description: string;
-    language: 'python' | 'javascript' | 'cpp';
-    codeSnippet: string; // The code with a blank (e.g., requests.____("url"))
-    expectedAnswer: string; // The correct word (e.g., "get")
+    displayData: string;
+    hint?: string;
+    choices?: string[];
+    correctAnswer: string;
+    warning?: string; // High-stakes warning text
 }
 
-export const ROUND2_PROBLEMS: TerminalProblem[] = [
+export const ROUND2_PROBLEMS: ReactorPuzzle[] = [
     {
         id: 0,
-        title: "The Secure Payload",
-        description: "This Python function fetches data from a secure endpoint, but the request method is missing. Enter the standard method used to retrieve data.",
-        language: 'python',
-        codeSnippet: `import requests
-
-def fetch_secure_payload():
-    url = "https://api.sys-core.local/v1/payload"
-    # Initiate secure connection
-    response = requests.____(url, timeout=5)
-    
-    if response.status_code == 200:
-        return response.json()
-    return None`,
-        expectedAnswer: "get"
+        coreNumber: 1,
+        title: "The Pizza Apocalypse",
+        type: 'debug',
+        description: "The automated pizzeria's AI is stuck in a deep recursion loop! It's generating topping combinations at an industrial scale. Identify the line number (1-10) where the recursive call fails to decrement, causing the infinite pepperoni surge.",
+        displayData: "1: def serve_pizza(orders, batch_id):\n2:     if not orders:\n3:         return \"BATCH_COMPLETE\"\n4:     \n5:     current = orders[0]\n6:     print(f\"Processing {current} for {batch_id}\")\n7:     \n8:     # The recursion should move to the next order\n9:     # but something is stuck...\n10:    return serve_pizza(orders, batch_id)",
+        hint: "The function calls itself with the exact same 'orders' list every time. It never reaches the empty list base case.",
+        correctAnswer: "10",
+        warning: "ALERT: PIZZA_OVERFLOW_DETECTED"
     },
     {
         id: 1,
-        title: "Dynamic Arrays",
-        description: "A JavaScript data stream is receiving packets. We need to add the new packet to the END of the processing queue. What array method does this?",
-        language: 'javascript',
-        codeSnippet: `function queueDataPacket(processingQueue, newPacket) {
-    if (!newPacket) return processingQueue;
-    
-    // Append the packet to the end of the queue
-    processingQueue.____(newPacket);
-    
-    return processingQueue;
-}`,
-        expectedAnswer: "push"
+        coreNumber: 2,
+        title: "The Mars Rover Orbit Bug",
+        type: 'debug',
+        description: "The Mars Rover was supposed to enter a stable orbit, but it's spiraling into the sun because of a sign error in its thruster logic. Identify the variable name that should be 'POSITIVE' but is currently being subtracted.",
+        displayData: "def adjust_orbit(velocity, gravity_constant):\n    # Thrust should counteract gravity\n    # to maintain stable altitude\n    orbital_push = velocity * 0.5\n    \n    # ERROR: This should be ADDED to thrust\n    trajectory = gravity_constant - orbital_push\n    \n    return trajectory",
+        hint: "To stay in orbit, you need to add thrust to overcome the gravity constant, not subtract it from the constants.",
+        correctAnswer: "orbital_push",
+        warning: "CRITICAL: ROVER_SPIRAL_INITIATED"
     },
     {
         id: 2,
-        title: "Loop Termination",
-        description: "This scanner hunts for an anomaly. Once found, it needs to immediately STOP scanning and exit the loop. What keyword stops a loop?",
-        language: 'python',
-        codeSnippet: `def scan_for_anomalies(data_stream):
-    anomaly_found = False
-    for packet in data_stream:
-        if is_corrupted(packet):
-            anomaly_found = True
-            # Halt the scan immediately
-            ____
-            
-    return anomaly_found`,
-        expectedAnswer: "break"
+        coreNumber: 3,
+        title: "The Coffee Machine Ghost",
+        type: 'debug',
+        description: "The office coffee machine says it's 100°C, but the water is ice cold. A local variable is 'shadowing' the real heater value. What is the actual temperature the internal heater sees?",
+        displayData: "temp = 0\ndef heat_up():\n    temp = 100\nheat_up()",
+        hint: "Python creates a new local variable 'temp' inside the function instead of updating the global one.",
+        correctAnswer: "0",
+        warning: "WARNING: CAFFEINE_LEVELS_ZERO"
     },
     {
         id: 3,
-        title: "Strict Equality",
-        description: "In JavaScript, we need to compare a status code to the number 200. It must match both VALUE and TYPE exactly. What operator should be used?",
-        language: 'javascript',
-        codeSnippet: `function verifyStatus(statusCode) {
-    // Check if the status code is exactly the number 200
-    // not just the string "200"
-    if (statusCode ____ 200) {
-        return "System Optimal";
-    }
-    
-    return "Error Detected";
-}`,
-        expectedAnswer: "==="
+        coreNumber: 4,
+        title: "The 404-Year-Old Intern",
+        type: 'debug',
+        description: "HR's database just gave an intern a '500-Year Loyal Service' award. An array index overflow is accessing random memory addresses. Which part of the code is reaching past the intern's actual years of service?",
+        displayData: "for (i=0; i < years.length; i++) {\n    total += years[i+1];\n}",
+        hint: "When i = length-1, i+1 is out of bounds.",
+        correctAnswer: "i+1",
+        warning: "NOTICE: INTERN_AGE_PHYSICS_BREACH"
     },
     {
         id: 4,
-        title: "The Pythonic Constructor",
-        description: "A Python class representing a NetworkNode is missing the name of its initialization method (the constructor). Fill in the standard magic method name (including underscores).",
-        language: 'python',
-        codeSnippet: `class NetworkNode:
-    # Initialize the node with an IP address
-    def ____(self, ip_address):
-        self.ip = ip_address
-        self.status = "ONLINE"
-        self.connections = 0
-
-    def connect(self):
-        self.connections += 1`,
-        expectedAnswer: "__init__"
+        coreNumber: 5,
+        title: "The Vacuum Jailbreak",
+        type: 'debug',
+        description: "Your robot vacuum thinks the wall is a 'Power-Up' and is trying to drive through it. Operator precedence is making it ignore the 'WALL_MASK'. What two characters are missing to fix the bitwise check?",
+        displayData: "if (status & WALL_MASK == WALL_MASK) { ... }",
+        hint: "The == operator triggers before &. You need to wrap the bitwise operation in a specific pair of characters.",
+        correctAnswer: "()",
+        warning: "SYSTEM: VACUUM_WALL_MERGE_INITIATED"
     }
 ];

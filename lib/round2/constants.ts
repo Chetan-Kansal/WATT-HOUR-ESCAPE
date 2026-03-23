@@ -28,7 +28,7 @@ export const ROUND2_PROBLEMS: DebugProblem[] = [
         total = total - 5 # BUG LINE
     
     return total`,
-        buggyLineIndex: 8,
+        buggyLineIndex: 9,
         fixes: [
             "total = total + 5",
             "total = total * 1.05",

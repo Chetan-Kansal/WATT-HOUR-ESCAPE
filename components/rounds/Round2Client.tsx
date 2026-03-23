@@ -1,269 +1,256 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, XCircle, Loader2, RefreshCw, Terminal, Code2, PlayCircle, Cpu, ChevronDown, Lock, ChevronRight } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, Terminal, Cpu, ChevronRight, Activity, ShieldAlert, CpuIcon, ScanLine, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
-
-const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false })
-
-interface Problem {
-    id: number
-    title: string
-    problem_text: string
-    code_snippet: {
-        python: string
-        javascript: string
-    }
-    expected_behavior: string
-    attempts_used: number
-    max_attempts: number
-    current_problem_index: number
-    total_problems: number
-    completed?: boolean
-}
-
-interface RunResult {
-    passed: boolean
-    message: string
-    stdout: string | null
-    expected: string
-    stderr: string | null
-    compile_output: string | null
-    status_desc: string
-    current_attempts: number
-    max_attempts: number
-    next_unlocked: boolean
-    round_complete: boolean
-}
-
-const LANGUAGES = [
-    { id: 'python', name: 'Python' },
-    { id: 'javascript', name: 'JavaScript' }
-]
+import { ROUND2_PROBLEMS, DebugProblem } from '@/lib/round2/constants'
 
 export default function Round2Client() {
     const router = useRouter()
-    const [problem, setProblem] = useState<Problem | null>(null)
-    const [selectedLanguage, setSelectedLanguage] = useState('python')
-    const [code, setCode] = useState('')
+    const [problem, setProblem] = useState<DebugProblem | null>(null)
     const [loading, setLoading] = useState(true)
-    const [running, setRunning] = useState(false)
-    const [result, setResult] = useState<RunResult | null>(null)
+    const [submitting, setSubmitting] = useState(false)
     const [currentIndex, setCurrentIndex] = useState(0)
+    const [selectedLine, setSelectedLine] = useState<number | null>(null)
+    const [selectedFix, setSelectedFix] = useState<number | null>(null)
+    const [statusMessage, setStatusMessage] = useState<string | null>(null)
+    const [scanPulse, setScanPulse] = useState(0)
 
-    const fetchProblem = (index?: number) => {
+    const fetchStatus = () => {
         setLoading(true)
-        const url = index !== undefined ? `/api/round2/problem?index=${index}&t=${Date.now()}` : `/api/round2/problem?t=${Date.now()}`
-        fetch(url, { cache: 'no-store' })
+        fetch('/api/round2/problem')
             .then(r => r.json())
             .then(data => {
                 if (data.completed) {
-                    toast.success("Round 2 already completed!")
                     router.push('/dashboard')
                     return
                 }
-                setProblem(data)
+                const prob = ROUND2_PROBLEMS[data.current_problem_index]
+                setProblem(prob)
                 setCurrentIndex(data.current_problem_index)
-                setCode(data.code_snippet[selectedLanguage] || '')
             })
-            .catch(() => toast.error('Failed to load problem'))
+            .catch(() => toast.error('Failed to initialize uplink'))
             .finally(() => setLoading(false))
     }
 
     useEffect(() => {
-        fetchProblem()
+        fetchStatus()
+        const interval = setInterval(() => setScanPulse(p => (p + 1) % 100), 50)
+        return () => clearInterval(interval)
     }, [])
 
-    useEffect(() => {
-        if (problem) {
-            setCode(problem.code_snippet[selectedLanguage as keyof typeof problem.code_snippet] || '')
-        }
-    }, [selectedLanguage, problem?.current_problem_index])
-
     const handleSubmit = async () => {
-        if (!problem || running) return
-        setRunning(true)
-        setResult(null)
+        if (selectedLine === null || selectedFix === null || submitting) return
+        
+        setSubmitting(true)
         try {
             const res = await fetch('/api/round2/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    problem_id: problem.id, 
-                    problem_index: problem.current_problem_index,
-                    code, 
-                    language: selectedLanguage 
-                }),
+                body: JSON.stringify({
+                    problem_id: problem?.id,
+                    selected_line: selectedLine,
+                    selected_fix: selectedFix
+                })
             })
-            const data: RunResult = await res.json()
-            if (!res.ok) {
-                toast.error((data as any).error || 'Submission failed')
-                return
-            }
-            setResult(data)
-            if (data.passed) {
-                toast.success('✓ CORRECT!')
-                if (data.round_complete) {
-                    toast.success('ROUND 2 COMPLETE!')
+            
+            const data = await res.json()
+            if (data.success) {
+                toast.success(data.message)
+                if (data.isRoundComplete) {
                     setTimeout(() => router.push('/dashboard'), 2000)
-                } else if (data.next_unlocked) {
-                    setTimeout(() => {
-                        fetchProblem()
-                        setResult(null)
-                    }, 2500)
+                } else {
+                    setSelectedLine(null)
+                    setSelectedFix(null)
+                    fetchStatus()
                 }
             } else {
-                toast.error('Test Failed')
-                setProblem(prev => prev ? { ...prev, attempts_used: data.current_attempts } : null)
+                setStatusMessage(data.details || 'LOGIC_MISMATCH_DETECTED')
+                toast.error(data.message)
             }
-        } catch {
-            toast.error('Submission failed. Please try again.')
+        } catch (err) {
+            toast.error('Uplink Interrupted')
         } finally {
-            setRunning(false)
+            setSubmitting(false)
         }
     }
 
     if (loading) return (
         <div className="flex items-center justify-center h-64 flex-col gap-4">
-            <Loader2 size={32} className="animate-spin text-primary" />
-            <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest animate-pulse">Initializing Environment...</span>
+            <Loader2 size={32} className="animate-spin text-green-500" />
+            <span className="text-[10px] font-mono text-green-500/60 tracking-[0.3em] uppercase animate-pulse">Establishing Logic Uplink...</span>
         </div>
     )
 
     if (!problem) return null
 
+    const codeLines = problem.code.split('\n')
+
     return (
-        <div className="space-y-6">
-            {/* Progress Bar / Steps */}
-            <div className="flex items-center justify-between gap-2 px-2 pb-2">
-                {ROUND2_PROBLEMS.map((p, idx) => (
-                    <div key={idx} className="flex-1 flex items-center gap-2">
-                        <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(34,197,94,0.2)] ${idx < currentIndex ? 'bg-green-500' : idx === currentIndex ? 'bg-green-400 animate-pulse' : 'bg-green-900/20'}`} />
-                        {idx < ROUND2_PROBLEMS.length - 1 && <ChevronRight size={14} className="text-green-900/40" />}
+        <div className="space-y-6 max-w-6xl mx-auto">
+            {/* Header: Status Bar */}
+            <div className="flex items-center justify-between bg-black/40 p-4 rounded-xl border border-green-500/20 backdrop-blur-md relative overflow-hidden">
+                <div className="absolute inset-0 bg-green-500/5 animate-pulse" />
+                <div className="flex items-center gap-6 relative z-10">
+                    <div className="flex items-center gap-2">
+                        <Activity size={16} className="text-green-500 animate-pulse" />
+                        <span className="text-[10px] font-mono text-green-500/60 uppercase tracking-widest">Sector_Safety_Audit</span>
                     </div>
-                ))}
-            </div>
-
-            <div className="flex items-center justify-between bg-green-950/20 p-3 rounded-lg border border-green-500/20 backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-mono text-green-500/60 uppercase tracking-widest">DECRYPTION_PHASE:</span>
-                    <span className="text-sm font-bold font-mono text-green-400 drop-shadow-[0_0_8px_rgba(34,197,94,0.4)]">BLOCK_{currentIndex + 1}: {problem.title.toUpperCase()}</span>
+                    <div className="h-4 w-px bg-green-500/20" />
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold font-mono text-green-400">UNIT_{currentIndex + 1}: {problem.title.toUpperCase()}</span>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 relative z-10">
+                    {ROUND2_PROBLEMS.map((_, idx) => (
+                        <div key={idx} className={`h-1 w-8 rounded-full transition-all duration-500 ${idx < currentIndex ? 'bg-green-500' : idx === currentIndex ? 'bg-green-400 animate-pulse' : 'bg-green-900/30'}`} />
+                    ))}
                 </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6 h-[auto] md:h-[550px]">
-                {/* Left: Description */}
-                <div className="flex flex-col gap-4 h-full">
-                    <div className="glass-card rounded-xl border border-border/50 flex-1 flex flex-col overflow-hidden bg-muted/5">
-                        <div className="bg-green-950/40 border-b border-green-500/20 px-4 py-2 flex items-center gap-2 relative">
-                            <div className="absolute inset-0 bg-green-500/5 animate-pulse pointer-events-none" />
-                            <Terminal size={16} className="text-green-500" />
-                            <span className="text-xs font-bold text-green-400 uppercase tracking-[0.2em] font-mono">KERNEL_BRIEFING</span>
-                        </div>
-                        <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
-                            <p className="text-sm text-muted-foreground leading-relaxed mb-6 font-sans">
-                                {problem.problem_text}
-                            </p>
-                            <div className="space-y-4">
-                                <div className="p-4 bg-primary/5 rounded-lg border border-primary/20">
-                                    <h4 className="text-[10px] uppercase tracking-widest text-primary font-bold mb-2">Expected Behavior</h4>
-                                    <p className="text-xs text-foreground/80 font-mono italic">{problem.expected_behavior}</p>
-                                </div>
+            <div className="grid lg:grid-cols-12 gap-6">
+                {/* Left: Code Inspection (Col 7) */}
+                <div className="lg:col-span-7 space-y-4">
+                    <div className="bg-[#0D1117] rounded-xl border border-white/5 overflow-hidden flex flex-col h-[600px] shadow-2xl relative group">
+                        {/* Scanning HUD Overlay */}
+                        <div className="absolute top-0 left-0 w-full h-1 bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.5)] z-20 pointer-events-none transition-all duration-[2000ms] ease-linear" style={{ top: `${scanPulse}%` }} />
+                        
+                        <div className="bg-white/5 border-b border-white/10 px-4 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <ScanLine size={16} className="text-green-500" />
+                                <span className="text-xs font-bold text-white/70 font-mono tracking-widest">LOGIC_FLOW_ANALYSIS</span>
                             </div>
+                            <span className="text-[10px] font-mono text-green-500/40">{problem.language.toUpperCase()}_KERNEL v2.4</span>
                         </div>
-                    </div>
 
-                    {/* Test Results Terminal (Simplified) */}
-                    <div className="glass-card rounded-xl border border-border/50 bg-[#0A0A0A] h-[180px] flex flex-col">
-                        <div className="bg-[#111] border-b border-[#333] px-4 py-2 flex items-center gap-2">
-                            <Terminal size={14} className="text-muted-foreground" />
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">Output Log_</span>
-                        </div>
-                        <div className="p-4 overflow-y-auto flex-1 font-mono text-[11px] space-y-2">
-                            {result ? (
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        {result.passed ? <CheckCircle2 size={14} className="text-green-400" /> : <XCircle size={14} className="text-red-400" />}
-                                        <span className={result.passed ? 'text-green-400' : 'text-red-400'}>{result.message}</span>
-                                    </div>
-                                    {!result.passed && (
-                                        <>
-                                            <div className="text-muted-foreground mt-2 border-t border-white/5 pt-2">Details:</div>
-                                            <div className="text-red-300">Expected: {result.expected}</div>
-                                            <div className="text-red-400">Received: {result.stdout || 'None'}</div>
-                                            {result.stderr && <div className="text-red-500 overflow-hidden text-ellipsis italic opacity-70">Stderr: {result.stderr}</div>}
-                                        </>
+                        <div className="flex-1 overflow-y-auto p-4 font-mono text-sm custom-scrollbar bg-[#010409]">
+                            {codeLines.map((line, idx) => (
+                                <motion.div
+                                    key={idx}
+                                    onClick={() => { setSelectedLine(idx); setStatusMessage(null); }}
+                                    className={`group flex items-start gap-4 cursor-pointer rounded px-2 py-1 transition-all relative ${selectedLine === idx ? 'bg-green-500/10 border-l-2 border-green-500' : 'hover:bg-white/5'}`}
+                                    whileHover={{ x: 4 }}
+                                >
+                                    <span className={`w-8 text-right text-xs shrink-0 select-none ${selectedLine === idx ? 'text-green-500 font-bold' : 'text-white/20'}`}>
+                                        {String(idx + 1).padStart(2, '0')}
+                                    </span>
+                                    <span className={`whitespace-pre break-all ${selectedLine === idx ? 'text-green-400' : 'text-blue-100/80 group-hover:text-white'}`}>
+                                        {line || ' '}
+                                    </span>
+                                    {selectedLine === idx && (
+                                        <motion.div layoutId="selector" className="absolute inset-0 bg-green-500/5 pointer-events-none" />
                                     )}
-                                </div>
-                            ) : (
-                                <div className="text-muted-foreground/30 animate-pulse italic">Waiting for execution...</div>
-                            )}
+                                </motion.div>
+                            ))}
                         </div>
                     </div>
+                    <p className="text-[10px] font-mono text-white/30 text-center uppercase tracking-[0.2em]">Select the line where the logic leak is occurring</p>
                 </div>
 
-                {/* Right: Editor */}
-                <div className="flex flex-col h-full gap-4">
-                    <div className="glass-card rounded-xl border border-border/50 flex-1 flex flex-col overflow-hidden bg-[#1E1E1E]">
-                        <div className="bg-[#2D2D2D] border-b border-[#111] px-4 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <select
-                                        value={selectedLanguage}
-                                        onChange={(e) => setSelectedLanguage(e.target.value)}
-                                        className="appearance-none bg-[#1E1E1E] border border-[#444] text-[#CCCCCC] text-xs font-mono py-1 pl-3 pr-8 rounded focus:outline-none focus:border-primary cursor-pointer transition-colors"
-                                    >
-                                        {LANGUAGES.map(lang => (
-                                            <option key={lang.id} value={lang.id}>{lang.name}</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setCode(problem.code_snippet[selectedLanguage as keyof typeof problem.code_snippet] || '')}
-                                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 font-mono uppercase"
-                            >
-                                <RefreshCw size={12} /> Reset Code
-                            </button>
+                {/* Right: Repair Station (Col 5) */}
+                <div className="lg:col-span-5 space-y-6">
+                    {/* Mission Brief */}
+                    <div className="bg-blue-950/10 border border-blue-500/20 rounded-xl p-5 backdrop-blur-sm relative">
+                        <div className="absolute top-0 right-0 p-3">
+                            <ShieldAlert size={18} className="text-blue-500/40" />
+                        </div>
+                        <h4 className="text-[10px] font-mono text-blue-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                           <Terminal size={12} /> Analysis_Brief
+                        </h4>
+                        <p className="text-sm text-blue-100/70 leading-relaxed font-sans mb-4">
+                            {problem.description}
+                        </p>
+                        <div className="p-3 bg-blue-500/5 rounded border border-blue-500/10 italic text-[11px] text-blue-300/80">
+                            Target Output: {problem.expectedBehavior}
+                        </div>
+                    </div>
+
+                    {/* Repair Modules */}
+                    <div className={`space-y-4 transition-all duration-500 ${selectedLine !== null ? 'opacity-100 translate-y-0' : 'opacity-30 pointer-events-none translate-y-4'}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                            <Wrench size={14} className="text-green-500" />
+                            <span className="text-xs font-bold text-white/70 font-mono tracking-widest uppercase">Select Repair Module</span>
                         </div>
                         
-                        <div className="flex-1 relative">
-                            <MonacoEditor
-                                language={selectedLanguage === 'javascript' ? 'javascript' : 'python'}
-                                value={code}
-                                onChange={v => setCode(v ?? '')}
-                                theme="vs-dark"
-                                options={{
-                                    fontSize: 14,
-                                    minimap: { enabled: false },
-                                    scrollBeyondLastLine: false,
-                                    padding: { top: 16 },
-                                    fontFamily: 'JetBrains Mono, monospace',
-                                    renderLineHighlight: 'all',
-                                    cursorBlinking: 'smooth',
-                                }}
-                            />
+                        <div className="grid gap-3">
+                            {problem.fixes.map((fix, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => setSelectedFix(idx)}
+                                    className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden group ${selectedFix === idx ? 'bg-green-500/10 border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.2)]' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
+                                >
+                                    <div className="flex items-center gap-3 relative z-10">
+                                        <div className={`w-6 h-6 rounded-full border flex items-center justify-center text-[10px] font-bold ${selectedFix === idx ? 'bg-green-500 border-green-500 text-black' : 'border-white/20 text-white/40'}`}>
+                                            {String.fromCharCode(65 + idx)}
+                                        </div>
+                                        <code className={`text-xs ${selectedFix === idx ? 'text-green-400' : 'text-white/60 group-hover:text-white/80'}`}>
+                                            {fix}
+                                        </code>
+                                    </div>
+                                    {selectedFix === idx && (
+                                        <div className="absolute inset-0 bg-green-500/5 animate-pulse" />
+                                    )}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
+                    {/* Status Feedback */}
+                    <AnimatePresence mode="wait">
+                        {statusMessage && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3"
+                            >
+                                <XCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
+                                <div className="space-y-1">
+                                    <span className="text-[10px] font-mono text-red-400 font-bold uppercase tracking-widest">Diagnostic_Warning</span>
+                                    <p className="text-xs text-red-200/70 font-mono leading-tight">{statusMessage}</p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Submit Button */}
                     <button
                         onClick={handleSubmit}
-                        disabled={running}
-                        className="w-full h-14 flex-shrink-0 bg-green-600 text-black rounded-xl font-mono text-sm uppercase tracking-[0.3em] font-black hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:shadow-[0_0_30px_rgba(34,197,94,0.6)]"
+                        disabled={selectedLine === null || selectedFix === null || submitting}
+                        className={`w-full h-16 rounded-xl font-mono text-sm uppercase tracking-[0.4em] font-black transition-all flex items-center justify-center gap-4 relative overflow-hidden ${selectedLine !== null && selectedFix !== null ? 'bg-green-500 text-black shadow-[0_0_30px_rgba(34,197,94,0.4)] hover:scale-[1.02] active:scale-95' : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/10'}`}
                     >
-                        {running ? (
-                            <><Cpu size={20} className="animate-spin" /> <span>BYPASSING_FIREWALL...</span></>
+                        {submitting ? (
+                            <><Loader2 size={24} className="animate-spin" /> APPROVING_REPAIR...</>
                         ) : (
-                            <><PlayCircle size={20} /> <span>EXECUTE_PAYLOAD</span></>
+                            <><CpuIcon size={24} /> <span>INITIALIZE_REPAIR</span></>
+                        )}
+                        {selectedLine !== null && selectedFix !== null && !submitting && (
+                            <div className="absolute inset-0 bg-white/10 translate-x-[-100%] animate-[shimmer_2s_infinite]" />
                         )}
                     </button>
                 </div>
             </div>
+
+            <style jsx global>{`
+                @keyframes shimmer {
+                    100% { transform: translateX(100%); }
+                }
+                .custom-scrollbar::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: rgba(34, 197, 94, 0.1);
+                    border-radius: 10px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: rgba(34, 197, 94, 0.3);
+                }
+            `}</style>
         </div>
     )
 }

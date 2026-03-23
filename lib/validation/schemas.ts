@@ -21,8 +21,8 @@ export const Round1SubmitSchema = z.object({
 // ── Round 2 ──────────────────────────────────────────────────────────────────
 export const Round2SubmitSchema = z.object({
     problem_id: z.number(),
-    code: z.string().min(1, 'Code cannot be empty').max(10000, 'Code too long'),
-    language: z.string(),
+    selected_line: z.number().min(0),
+    selected_fix: z.number().min(0),
 })
 
 // ── Round 4 ──────────────────────────────────────────────────────────────────

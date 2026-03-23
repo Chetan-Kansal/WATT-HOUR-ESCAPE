@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { canAccessRound } from '@/lib/roundLogic'
 import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
-import { obfuscateCode } from '@/lib/round2/obfuscate'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +31,6 @@ export async function GET(req: NextRequest) {
         }
 
         const currentIndex = progress?.round2_problem_index ?? 0
-        const attemptsMap = (progress?.round2_attempts as Record<string, number>) || {}
 
         // Admin support: Allow overriding index via query param if requester is admin
         const urlIndex = req.nextUrl.searchParams.get('index')
@@ -46,22 +44,21 @@ export async function GET(req: NextRequest) {
         }
 
         const problem = ROUND2_PROBLEMS[targetIndex]
-        const attemptsUsed = attemptsMap[targetIndex.toString()] || 0
 
-        // Obfuscate code: remove BUG comments
-        const obfuscatedSnippet = {
-            python: obfuscateCode(problem.brokenCode.python, 'python'),
-            javascript: obfuscateCode(problem.brokenCode.javascript, 'javascript')
-        }
+        // Clean the code of # BUG LINE or // BUG LINE comments
+        const cleanCode = problem.code
+            .replace(/# BUG LINE/g, '')
+            .replace(/\/\/ BUG LINE/g, '')
+            .trim()
 
         return NextResponse.json({
             id: problem.id,
             title: problem.title,
-            problem_text: problem.description,
-            code_snippet: obfuscatedSnippet,
-            expected_behavior: problem.expectedBehavior,
-            attempts_used: attemptsUsed,
-            max_attempts: 10,
+            description: problem.description,
+            code: cleanCode,
+            language: problem.language,
+            fixes: problem.fixes,
+            expectedBehavior: problem.expectedBehavior,
             current_problem_index: targetIndex,
             total_problems: ROUND2_PROBLEMS.length,
             is_admin: isAdmin

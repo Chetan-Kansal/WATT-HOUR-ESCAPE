@@ -1,376 +1,98 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
-import { Round2SubmitSchema } from '@/lib/validation/schemas'
-import { canAccessRound, completeRound, logIPAddress, logAuditSubmission } from '@/lib/roundLogic'
+import { createSupabaseServerClient, createSupabaseAdmin } from '@/lib/supabase/server'
 import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
-
-export const dynamic = 'force-dynamic'
-
-import { execSync } from 'child_process'
-import fs from 'fs'
-import path from 'path'
-import os from 'os'
-import vm from 'vm'
-
-// Judge0 language → ID mapping
-const LANGUAGE_IDS: Record<string, number> = {
-    python: 71,
-    javascript: 63,
-}
-
-interface Judge0Result {
-    stdout: string | null
-    stderr: string | null
-    status: { id: number; description: string }
-    time: string
-    memory: number
-    compile_output: string | null
-}
-
-async function runOnJudge0(code: string, languageId: number, stdin: string): Promise<Judge0Result> {
-    const JUDGE0_BASE = process.env.JUDGE0_BASE_URL ?? 'https://judge0-ce.p.rapidapi.com'
-    const API_KEY = process.env.JUDGE0_API_KEY!
-
-    const submitRes = await fetch(`${JUDGE0_BASE}/submissions?wait=false`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-RapidAPI-Key': API_KEY,
-            'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
-        },
-        body: JSON.stringify({
-            source_code: code,
-            language_id: languageId,
-            stdin: stdin,
-            cpu_time_limit: 5,
-            memory_limit: 128000,
-            max_processes_and_or_threads: 10,
-        }),
-    })
-
-    if (!submitRes.ok) throw new Error('Judge0 submission failed')
-    const { token } = await submitRes.json()
-
-    for (let i = 0; i < 20; i++) {
-        await new Promise(r => setTimeout(r, 500))
-        const resultRes = await fetch(`${JUDGE0_BASE}/submissions/${token}?base64_encoded=false`, {
-            headers: {
-                'X-RapidAPI-Key': API_KEY,
-                'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
-            },
-        })
-        const result: Judge0Result & { status: { id: number } } = await resultRes.json()
-        if (result.status.id > 2) return result
-    }
-    throw new Error('Execution timed out')
-}
-
-// Fallback for JS that works on Vercel without a Python interpreter
-async function runJSInSandbox(code: string): Promise<any> {
-    let output = '';
-    const sandbox = {
-        console: {
-            log: (...args: any[]) => {
-                output += args.join(' ') + '\n';
-            }
-        }
-    };
-    
-    try {
-        const script = new vm.Script(code);
-        const context = vm.createContext(sandbox);
-        script.runInContext(context, { timeout: 3000 });
-        
-        return {
-            stdout: output,
-            stderr: null,
-            status: { id: 3, description: 'Accepted (Cloud JS)' }
-        };
-    } catch (err: any) {
-        return {
-            stdout: output,
-            stderr: err.message,
-            status: { id: 4, description: 'Runtime Error' }
-        };
-    }
-}
-
-// Transpilation shim for simple Python logic (Robust Indentation & Comments for Cloud)
-async function runPythonInCloud(code: string): Promise<any> {
-    const lines = code.split('\n');
-    let jsLines: string[] = [];
-    let indentStack: number[] = [0];
-    
-    for (let line of lines) {
-        // 1. Normalize tabs and trailing spaces
-        let l = line.replace(/\t/g, '    ').replace(/\s+$/, '');
-        
-        // 2. Extract comment and content
-        let content = l;
-        let comment = '';
-        const hashIdx = l.indexOf('#');
-        if (hashIdx !== -1) {
-            content = l.substring(0, hashIdx);
-            comment = '//' + l.substring(hashIdx + 1);
-        }
-
-        const trimmedContent = content.trim();
-        if (!trimmedContent) {
-            jsLines.push(l.replace(/#/g, '//')); // Preserve empty lines or standalone comments
-            continue;
-        }
-
-        // 3. Handle Indentation
-        const currentIndent = content.search(/\S/);
-        
-        // Close braces if indentation decreased
-        while (indentStack.length > 1 && currentIndent < indentStack[indentStack.length - 1]) {
-            indentStack.pop();
-            jsLines.push(' '.repeat(indentStack[indentStack.length - 1]) + '}');
-        }
-
-        // 4. Transform Keywords & Syntax
-        let processed = content
-            .replace(/def\s+(\w+)\((.*?)\):/g, 'function $1($2) {')
-            .replace(/if\s+(.*?):/g, 'if ($1) {')
-            .replace(/elif\s+(.*?):/g, 'else if ($1) {')
-            .replace(/else:/g, 'else {')
-            .replace(/for\s+(\w+)\s+in\s+(.*?):/g, 'for (let $1 of $2) {')
-            .replace(/True/g, 'true')
-            .replace(/False/g, 'false')
-            .replace(/and/g, '&&')
-            .replace(/or/g, '||')
-            .replace(/not\s+/g, '!')
-            .replace(/None/g, 'null')
-            .replace(/len\((.*?)\)/g, '$1.length')
-            .replace(/\.endswith\((.*?)\)/g, '.endsWith($1)')
-            .replace(/print\((.*?)\)/g, 'console.log($1)');
-
-        // 5. If a new block opened, update the stack
-        if (processed.includes('{')) {
-            // Find the indentation of the NEXT expected line (which is current + something)
-            // But we already know we opened a block, so we just wait for the next line's indent to set the level.
-            // Or simpler: push the current indent + 1 as the minimum for this block.
-            indentStack.push(currentIndent + 1); 
-        }
-
-        jsLines.push(processed + (comment ? ' ' + comment : ''));
-    }
-
-    // Close any remaining braces
-    while (indentStack.length > 1) {
-        indentStack.pop();
-        jsLines.push(' '.repeat(indentStack[indentStack.length - 1]) + '}');
-    }
-
-    const jsCode = jsLines.join('\n');
-    return runJSInSandbox(jsCode);
-}
-
-async function runLocally(code: string, language: string): Promise<any> {
-    // For JS on Vercel/Cloud, use the Sandbox instead of child_process
-    if (language === 'javascript') {
-        return runJSInSandbox(code);
-    }
-
-    const tempDir = os.tmpdir();
-    const fileName = `submit_${Date.now()}.${language === 'python' ? 'py' : 'js'}`;
-    const filePath = path.join(tempDir, fileName);
-    
-    try {
-        fs.writeFileSync(filePath, code);
-        
-        // Windows uses 'python', Mac/Linux uses 'python3'
-        const isWindows = process.platform === 'win32';
-        const pythonCmd = isWindows ? 'python' : 'python3';
-        const cmd = language === 'python' ? `${pythonCmd} "${filePath}"` : `node "${filePath}"`;
-        
-        let stdout = '';
-        let stderr = '';
-        try {
-            stdout = execSync(cmd, { timeout: 5000, stdio: 'pipe' }).toString();
-        } catch (err: any) {
-            // IF Python fails with "command not found", use the Cloud Shim!
-            const errorMsg = err.stderr?.toString() || err.message || '';
-            if (language === 'python' && (errorMsg.includes('not found') || errorMsg.includes('is not recognized'))) {
-                console.log("[Round 2] Python runtime not found. Falling back to Cloud Shim.");
-                return runPythonInCloud(code);
-            }
-
-            stdout = err.stdout?.toString() || '';
-            stderr = errorMsg;
-            return {
-                stdout,
-                stderr,
-                status: { id: 4, description: 'Runtime Error' } // 4 = Runtime Error in Judge0
-            };
-        }
-        
-        return {
-            stdout,
-            stderr: null,
-            status: { id: 3, description: 'Accepted (Local)' } // 3 = Accepted
-        };
-    } finally {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    }
-}
-
-function normalizeOutput(str: string | null): string {
-    if (!str) return ''
-    
-    // Split by newlines and filter out empty lines to find the actual result
-    const lines = str.trim().split(/\r?\n/).filter(line => line.trim() !== '');
-    const lastLine = lines.length > 0 ? lines[lines.length - 1].trim() : '';
-    
-    // Normalize numeric-like strings (e.g., "35.0" -> "35")
-    return lastLine
-      .replace(/\.0+$/, '') 
-      .replace(/\.([0-9]*[1-9])0+$/, '.$1')
-      .toLowerCase();
-}
-
-function isJudge0Enabled() {
-    const key = process.env.JUDGE0_API_KEY
-    return key && key !== 'your_rapidapi_key_here' && key.length > 10
-}
-
-function wrapCode(code: string, language: string, problem: any): string {
-    if (language.toLowerCase() === 'python') {
-        const funcName = problem.pythonFunction;
-        return `${code}\n\nprint(${funcName}(${problem.input}))`;
-    } else {
-        const funcName = problem.jsFunction;
-        return `${code}\n\nconsole.log(${funcName}(${problem.input}))`;
-    }
-}
+import { Round2SubmitSchema, validationError } from '@/lib/validation/schemas'
 
 export async function POST(req: NextRequest) {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown'
-
     try {
+        const body = await req.json()
+        const validated = Round2SubmitSchema.safeParse(body)
+        
+        if (!validated.success) {
+            return validationError(validated.error.errors[0].message)
+        }
+
+        const { problem_id, selected_line, selected_fix } = validated.data
+        const problem = ROUND2_PROBLEMS.find(p => p.id === problem_id)
+
+        if (!problem) {
+            return NextResponse.json({ error: 'Invalid problem ID' }, { status: 400 })
+        }
+
         const supabase = createSupabaseServerClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const admin = createSupabaseAdmin()
-        const { data: team, error: teamError } = await admin.from('teams').select('role').eq('id', user.id).single()
-        if (teamError) {
-            console.error("Submission: Error fetching team:", teamError)
+        const { data: team, error: teamError } = await admin.from('teams').select('id, role, last_submission_time').eq('id', user.id).single()
+        if (teamError || !team) {
             return NextResponse.json({ error: 'Failed to verify identity' }, { status: 500 })
         }
-        const isAdmin = team?.role === 'admin'
 
-        const canAccess = await canAccessRound(user.id, 2)
-        if (!canAccess && !isAdmin) return NextResponse.json({ error: 'Round 1 not completed' }, { status: 403 })
-
-        const body = await req.json()
-        const parsed = Round2SubmitSchema.safeParse(body)
-        if (!parsed.success) {
-            return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+        // 5 second cooldown
+        const now = Date.now()
+        const lastSub = team.last_submission_time ? new Date(team.last_submission_time).getTime() : 0
+        if (now - lastSub < 5000) {
+            return NextResponse.json({ error: 'System cooling down. Please wait 5 seconds.' }, { status: 429 })
         }
 
-        const { problem_id, code, language } = parsed.data
-        const languageId = LANGUAGE_IDS[language.toLowerCase()]
-        if (!languageId) return NextResponse.json({ error: 'Unsupported language' }, { status: 400 })
+        const isCorrectLine = selected_line === problem.buggyLineIndex
+        const isCorrectFix = selected_fix === problem.correctFixIndex
+        const isSuccess = isCorrectLine && isCorrectFix
 
-        // Get player progress and admin status
-        const { data: progress, error: progError } = await admin
-            .from('progress')
-            .select('round2_problem_index, round2_attempts, round2_completed')
-            .eq('team_id', user.id)
-            .single()
+        // Update submission timestamp
+        await admin
+            .from('teams')
+            .update({ last_submission_time: new Date().toISOString() } as never)
+            .eq('id', team.id)
 
-        if (progError) {
-            console.error("Submission: Error fetching progress:", progError)
-            return NextResponse.json({ error: 'Failed to fetch progress' }, { status: 500 })
+        if (!isSuccess) {
+            let errorDetail = ""
+            if (!isCorrectLine) errorDetail = "SCAN FAILED: Logic leak not located at selected coordinates."
+            else if (!isCorrectFix) errorDetail = "REPAIR FAILED: Selected logic module is incompatible with the leak."
+
+            return NextResponse.json({
+                success: false,
+                message: 'REPAIR FAILED',
+                details: errorDetail
+            })
         }
 
-        if (progress?.round2_completed) {
-            return NextResponse.json({ error: 'Round 2 already completed' }, { status: 400 })
-        }
-
+        // Handle progression
+        const { data: progress } = await admin.from('progress').select('round2_problem_index').eq('team_id', user.id).single()
         const currentIndex = progress?.round2_problem_index ?? 0
-        const problemIndex = (isAdmin && body.problem_index !== undefined) ? body.problem_index : currentIndex
-
-        console.log(`[Round 2 Submit] Team: ${user.id}, Problem: ${problemIndex}, Current: ${currentIndex}, Admin: ${isAdmin}`)
-
-        if (problemIndex >= ROUND2_PROBLEMS.length) {
-            return NextResponse.json({ error: 'Invalid problem index' }, { status: 400 })
+        
+        let nextIndex = currentIndex
+        if (problem_id === currentIndex) {
+            nextIndex = currentIndex + 1
         }
 
-        const problem = ROUND2_PROBLEMS[problemIndex]
-        const attemptsMap = (progress?.round2_attempts as Record<string, number>) || {}
-        const currentAttempts = attemptsMap[problemIndex.toString()] || 0
+        const isRoundComplete = nextIndex >= ROUND2_PROBLEMS.length
 
-        // Execute via Judge0 or Mock Mode
-        let passed = false
-        let result: any = null
-
-        if (isJudge0Enabled()) {
-            const wrappedCode = wrapCode(code, language, problem)
-            result = await runOnJudge0(wrappedCode, languageId, "") // stdin no longer needed if we wrap
-            const stdout = normalizeOutput(result.stdout)
-            const expected = normalizeOutput(problem.expectedOutput)
-
-            passed = (result.status.id === 3) && (stdout === expected)
-        } else {
-            // Mock Mode: Now uses LOCAL EXECUTION
-            const wrappedCode = wrapCode(code, language, problem)
-            result = await runLocally(wrappedCode, language)
-            const stdout = normalizeOutput(result.stdout)
-            const expected = normalizeOutput(problem.expectedOutput)
-
-            passed = (result.status.id === 3) && (stdout === expected)
+        // Update progress in DB
+        const updateData: any = {
+            round2_problem_index: nextIndex
+        }
+        if (isRoundComplete) {
+            updateData.round2_completed = true
         }
 
-        // Update attempts
-        if (!isAdmin) {
-            attemptsMap[problemIndex.toString()] = currentAttempts + 1
-            const { error: updateError } = await admin.from('progress').update({ round2_attempts: attemptsMap } as never).eq('team_id', user.id)
-            if (updateError) console.error("Error updating attempts:", updateError)
-        }
+        await admin.from('progress').update(updateData as never).eq('team_id', user.id)
 
-        let nextProblemUnlocked = false
-        if (passed) {
-            // Only increment if they solved the current problem (and were on it)
-            if (problemIndex === currentIndex) {
-                const newIndex = currentIndex + 1
-                const { error: indexError } = await admin.from('progress').update({ round2_problem_index: newIndex } as never).eq('team_id', user.id)
-                if (indexError) {
-                    console.error("Error updating problem index:", indexError)
-                } else {
-                    console.log(`[Round 2 Submit] Progress updated to index ${newIndex}`)
-                    if (newIndex >= ROUND2_PROBLEMS.length) {
-                        await completeRound(user.id, 2)
-                    }
-                    nextProblemUnlocked = true
-                }
-            } else if (isAdmin) {
-                // For admin testing a specific problem out of order
-                nextProblemUnlocked = true
-            }
+        // If round complete, move to Round 3
+        if (isRoundComplete) {
+            await admin.from('teams').update({ current_round: 3 } as never).eq('id', user.id)
         }
-
-        await logIPAddress(user.id, ip, '/api/round2/submit')
-        await logAuditSubmission(user.id, 2, `Problem ${problemIndex}: ${problem.title}. Language: ${language}. Passed: ${passed}`, ip)
 
         return NextResponse.json({
-            passed,
-            message: passed ? 'CORRECT! ENGINEERING SKILL CONFIRMED' : 'TEST FAILED',
-            stdout: result.stdout,
-            expected: problem.expectedOutput,
-            stderr: result.stderr,
-            compile_output: result.compile_output,
-            status_desc: result.status.description,
-            current_attempts: isAdmin ? currentAttempts : (currentAttempts + 1),
-            max_attempts: 10,
-            next_unlocked: nextProblemUnlocked,
-            round_complete: (problemIndex >= ROUND2_PROBLEMS.length - 1) && passed
+            success: true,
+            message: isRoundComplete ? 'ACCESS GRANTED: ROUND 2 COMPLETE' : 'LOGIC REPAIRED: MOVING TO NEXT SECTOR',
+            nextLevel: isRoundComplete ? null : nextIndex,
+            isRoundComplete
         })
 
-    } catch (e) {
-        console.error(e)
+    } catch (err: any) {
+        console.error('[Round 2 Submit Error]:', err)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

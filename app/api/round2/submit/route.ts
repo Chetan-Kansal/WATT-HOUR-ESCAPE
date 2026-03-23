@@ -95,29 +95,42 @@ async function runJSInSandbox(code: string): Promise<any> {
     }
 }
 
-// Transpilation shim for simple Python logic (Indentation-aware for Cloud)
+// Transpilation shim for simple Python logic (Robust Indentation & Comments for Cloud)
 async function runPythonInCloud(code: string): Promise<any> {
     const lines = code.split('\n');
     let jsLines: string[] = [];
-    let indentStack = [0];
+    let indentStack: number[] = [0];
     
     for (let line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) {
-            jsLines.push(line);
+        // 1. Normalize tabs and trailing spaces
+        let l = line.replace(/\t/g, '    ').replace(/\s+$/, '');
+        
+        // 2. Extract comment and content
+        let content = l;
+        let comment = '';
+        const hashIdx = l.indexOf('#');
+        if (hashIdx !== -1) {
+            content = l.substring(0, hashIdx);
+            comment = '//' + l.substring(hashIdx + 1);
+        }
+
+        const trimmedContent = content.trim();
+        if (!trimmedContent) {
+            jsLines.push(l.replace(/#/g, '//')); // Preserve empty lines or standalone comments
             continue;
         }
 
-        // Calculate leading spaces
-        const indent = line.search(/\S/);
+        // 3. Handle Indentation
+        const currentIndent = content.search(/\S/);
         
-        // If indentation decreased, close braces
-        while (indent < indentStack[indentStack.length - 1]) {
+        // Close braces if indentation decreased
+        while (indentStack.length > 1 && currentIndent < indentStack[indentStack.length - 1]) {
             indentStack.pop();
             jsLines.push(' '.repeat(indentStack[indentStack.length - 1]) + '}');
         }
 
-        let processed = line
+        // 4. Transform Keywords & Syntax
+        let processed = content
             .replace(/def\s+(\w+)\((.*?)\):/g, 'function $1($2) {')
             .replace(/if\s+(.*?):/g, 'if ($1) {')
             .replace(/elif\s+(.*?):/g, 'else if ($1) {')
@@ -133,11 +146,15 @@ async function runPythonInCloud(code: string): Promise<any> {
             .replace(/\.endswith\((.*?)\)/g, '.endsWith($1)')
             .replace(/print\((.*?)\)/g, 'console.log($1)');
 
+        // 5. If a new block opened, update the stack
         if (processed.includes('{')) {
-            indentStack.push(indent + 4); // Assume 4 space indents for the next block
+            // Find the indentation of the NEXT expected line (which is current + something)
+            // But we already know we opened a block, so we just wait for the next line's indent to set the level.
+            // Or simpler: push the current indent + 1 as the minimum for this block.
+            indentStack.push(currentIndent + 1); 
         }
 
-        jsLines.push(processed);
+        jsLines.push(processed + (comment ? ' ' + comment : ''));
     }
 
     // Close any remaining braces

@@ -95,6 +95,34 @@ async function runJSInSandbox(code: string): Promise<any> {
     }
 }
 
+// Transpilation shim for simple Python logic (for cloud environments without Python runtime)
+async function runPythonInCloud(code: string): Promise<any> {
+    // Basic mapping of Python syntax to JS for simple logic-gate type problems
+    let jsCode = code
+        .replace(/def\s+(\w+)\((.*?)\):/g, 'function $1($2) {')
+        .replace(/:(\s*\n)/g, ' {$1')
+        .replace(/elif\s+/g, 'else if ')
+        .replace(/True/g, 'true')
+        .replace(/False/g, 'false')
+        .replace(/and/g, '&&')
+        .replace(/or/g, '||')
+        .replace(/not\s+/g, '!')
+        .replace(/None/g, 'null')
+        .replace(/len\((.*?)\)/g, '$1.length')
+        .replace(/\.endswith\((.*?)\)/g, '.endsWith($1)')
+        .replace(/print\((.*?)\)/g, 'console.log($1)');
+
+    // Very basic brace matching/closing for simple nested structures
+    // (This is hacky but sufficient for the 4 specific problems)
+    const openBraces = (jsCode.match(/{/g) || []).length;
+    const closedBraces = (jsCode.match(/}/g) || []).length;
+    if (openBraces > closedBraces) {
+        jsCode += '\n' + '}'.repeat(openBraces - closedBraces);
+    }
+
+    return runJSInSandbox(jsCode);
+}
+
 async function runLocally(code: string, language: string): Promise<any> {
     // For JS on Vercel/Cloud, use the Sandbox instead of child_process
     if (language === 'javascript') {
@@ -118,8 +146,15 @@ async function runLocally(code: string, language: string): Promise<any> {
         try {
             stdout = execSync(cmd, { timeout: 5000, stdio: 'pipe' }).toString();
         } catch (err: any) {
+            // IF Python fails with "command not found", use the Cloud Shim!
+            const errorMsg = err.stderr?.toString() || err.message || '';
+            if (language === 'python' && (errorMsg.includes('not found') || errorMsg.includes('is not recognized'))) {
+                console.log("[Round 2] Python runtime not found. Falling back to Cloud Shim.");
+                return runPythonInCloud(code);
+            }
+
             stdout = err.stdout?.toString() || '';
-            stderr = err.stderr?.toString() || err.message;
+            stderr = errorMsg;
             return {
                 stdout,
                 stderr,

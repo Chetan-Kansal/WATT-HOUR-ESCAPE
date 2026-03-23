@@ -21,8 +21,7 @@ export const Round1SubmitSchema = z.object({
 // ── Round 2 ──────────────────────────────────────────────────────────────────
 export const Round2SubmitSchema = z.object({
     problem_id: z.number(),
-    selected_line: z.number().min(0),
-    selected_fix: z.number().min(0),
+    answer: z.string().min(1).max(100),
 })
 
 // ── Round 4 ──────────────────────────────────────────────────────────────────

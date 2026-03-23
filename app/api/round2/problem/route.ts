@@ -49,10 +49,8 @@ export async function GET(req: NextRequest) {
             id: problem.id,
             title: problem.title,
             description: problem.description,
-            codeLines: problem.codeLines,
+            codeSnippet: problem.codeSnippet,
             language: problem.language,
-            fixes: problem.fixes,
-            expectedBehavior: problem.expectedBehavior,
             current_problem_index: targetIndex,
             total_problems: ROUND2_PROBLEMS.length,
             is_admin: isAdmin

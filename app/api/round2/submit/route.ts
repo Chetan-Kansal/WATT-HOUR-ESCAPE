@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
             return validationError(validated.error.errors[0].message)
         }
 
-        const { problem_id, selected_line, selected_fix } = validated.data
+        const { problem_id, answer } = validated.data
         const problem = ROUND2_PROBLEMS.find(p => p.id === problem_id)
 
         if (!problem) {
@@ -29,16 +29,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Failed to verify identity' }, { status: 500 })
         }
 
-        // 5 second cooldown
+        // 3 second cooldown for terminal typing
         const now = Date.now()
         const lastSub = team.last_submission_time ? new Date(team.last_submission_time).getTime() : 0
-        if (now - lastSub < 5000) {
-            return NextResponse.json({ error: 'System cooling down. Please wait 5 seconds.' }, { status: 429 })
+        if (now - lastSub < 3000) {
+            return NextResponse.json({ error: 'System cooling down. Please wait 3 seconds.' }, { status: 429 })
         }
 
-        const isCorrectLine = selected_line === problem.buggyLineIndex
-        const isCorrectFix = selected_fix === problem.correctFixIndex
-        const isSuccess = isCorrectLine && isCorrectFix
+        const isSuccess = answer.trim().toLowerCase() === problem.expectedAnswer.toLowerCase()
 
         // Update submission timestamp
         await admin
@@ -47,14 +45,10 @@ export async function POST(req: NextRequest) {
             .eq('id', team.id)
 
         if (!isSuccess) {
-            let errorDetail = ""
-            if (!isCorrectLine) errorDetail = `SCAN FAILED: Logic leak not located at selected coordinates. (Selected: ${selected_line + 1}, Expected: ${problem.buggyLineIndex + 1})`
-            else if (!isCorrectFix) errorDetail = "REPAIR FAILED: Selected logic module is incompatible with the leak."
-
             return NextResponse.json({
                 success: false,
-                message: 'REPAIR FAILED',
-                details: errorDetail
+                message: 'OVERRIDE FAILED',
+                details: "SYNTAX_ERROR: The provided keyword does not clear the anomaly."
             })
         }
 

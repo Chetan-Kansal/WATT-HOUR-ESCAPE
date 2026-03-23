@@ -100,8 +100,14 @@ async function runPythonInCloud(code: string): Promise<any> {
     // Basic mapping of Python syntax to JS for simple logic-gate type problems
     let jsCode = code
         .replace(/def\s+(\w+)\((.*?)\):/g, 'function $1($2) {')
-        .replace(/:(\s*\n)/g, ' {$1')
-        .replace(/elif\s+/g, 'else if ')
+        // Wrap 'if' conditions in parentheses: if total < 50: -> if (total < 50) {
+        .replace(/if\s+(.*?):/g, 'if ($1) {')
+        // Wrap 'elif' conditions in parentheses: elif x == y: -> else if (x == y) {
+        .replace(/elif\s+(.*?):/g, 'else if ($1) {')
+        // Convert simple 'for' loops: for p in prices: -> for (let p of prices) {
+        .replace(/for\s+(\w+)\s+in\s+(.*?):/g, 'for (let $1 of $2) {')
+        // Simple replacements
+        .replace(/else:/g, 'else {')
         .replace(/True/g, 'true')
         .replace(/False/g, 'false')
         .replace(/and/g, '&&')

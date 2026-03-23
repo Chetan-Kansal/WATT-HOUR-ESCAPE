@@ -95,37 +95,58 @@ async function runJSInSandbox(code: string): Promise<any> {
     }
 }
 
-// Transpilation shim for simple Python logic (for cloud environments without Python runtime)
+// Transpilation shim for simple Python logic (Indentation-aware for Cloud)
 async function runPythonInCloud(code: string): Promise<any> {
-    // Basic mapping of Python syntax to JS for simple logic-gate type problems
-    let jsCode = code
-        .replace(/def\s+(\w+)\((.*?)\):/g, 'function $1($2) {')
-        // Wrap 'if' conditions in parentheses: if total < 50: -> if (total < 50) {
-        .replace(/if\s+(.*?):/g, 'if ($1) {')
-        // Wrap 'elif' conditions in parentheses: elif x == y: -> else if (x == y) {
-        .replace(/elif\s+(.*?):/g, 'else if ($1) {')
-        // Convert simple 'for' loops: for p in prices: -> for (let p of prices) {
-        .replace(/for\s+(\w+)\s+in\s+(.*?):/g, 'for (let $1 of $2) {')
-        // Simple replacements
-        .replace(/else:/g, 'else {')
-        .replace(/True/g, 'true')
-        .replace(/False/g, 'false')
-        .replace(/and/g, '&&')
-        .replace(/or/g, '||')
-        .replace(/not\s+/g, '!')
-        .replace(/None/g, 'null')
-        .replace(/len\((.*?)\)/g, '$1.length')
-        .replace(/\.endswith\((.*?)\)/g, '.endsWith($1)')
-        .replace(/print\((.*?)\)/g, 'console.log($1)');
+    const lines = code.split('\n');
+    let jsLines: string[] = [];
+    let indentStack = [0];
+    
+    for (let line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+            jsLines.push(line);
+            continue;
+        }
 
-    // Very basic brace matching/closing for simple nested structures
-    // (This is hacky but sufficient for the 4 specific problems)
-    const openBraces = (jsCode.match(/{/g) || []).length;
-    const closedBraces = (jsCode.match(/}/g) || []).length;
-    if (openBraces > closedBraces) {
-        jsCode += '\n' + '}'.repeat(openBraces - closedBraces);
+        // Calculate leading spaces
+        const indent = line.search(/\S/);
+        
+        // If indentation decreased, close braces
+        while (indent < indentStack[indentStack.length - 1]) {
+            indentStack.pop();
+            jsLines.push(' '.repeat(indentStack[indentStack.length - 1]) + '}');
+        }
+
+        let processed = line
+            .replace(/def\s+(\w+)\((.*?)\):/g, 'function $1($2) {')
+            .replace(/if\s+(.*?):/g, 'if ($1) {')
+            .replace(/elif\s+(.*?):/g, 'else if ($1) {')
+            .replace(/else:/g, 'else {')
+            .replace(/for\s+(\w+)\s+in\s+(.*?):/g, 'for (let $1 of $2) {')
+            .replace(/True/g, 'true')
+            .replace(/False/g, 'false')
+            .replace(/and/g, '&&')
+            .replace(/or/g, '||')
+            .replace(/not\s+/g, '!')
+            .replace(/None/g, 'null')
+            .replace(/len\((.*?)\)/g, '$1.length')
+            .replace(/\.endswith\((.*?)\)/g, '.endsWith($1)')
+            .replace(/print\((.*?)\)/g, 'console.log($1)');
+
+        if (processed.includes('{')) {
+            indentStack.push(indent + 4); // Assume 4 space indents for the next block
+        }
+
+        jsLines.push(processed);
     }
 
+    // Close any remaining braces
+    while (indentStack.length > 1) {
+        indentStack.pop();
+        jsLines.push(' '.repeat(indentStack[indentStack.length - 1]) + '}');
+    }
+
+    const jsCode = jsLines.join('\n');
     return runJSInSandbox(jsCode);
 }
 

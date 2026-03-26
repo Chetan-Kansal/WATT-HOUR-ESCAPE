@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
+import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { canAccessRound } from '@/lib/roundLogic'
+import { ROUND5_SIGNALS } from '@/lib/round5/constants'
 
 export async function GET(req: NextRequest) {
     try {
@@ -9,29 +10,17 @@ export async function GET(req: NextRequest) {
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
         const canAccess = await canAccessRound(user.id, 5)
-        if (!canAccess) return NextResponse.json({ error: 'Round 4 not completed' }, { status: 403 })
+        if (!canAccess) return NextResponse.json({ error: 'Previous rounds not completed' }, { status: 403 })
 
-        const admin = createSupabaseAdmin()
-        const { data: audioClips } = await admin
-            .from('morse_data')
-            .select('id, audio_url, morse_code, sort_order')
-            // NOTE: never select 'word' or 'is_final_key' here
-            .eq('is_active', true)
-            .order('sort_order', { ascending: true })
-
-        if (!audioClips || audioClips.length === 0) {
-            return NextResponse.json({ error: 'No audio clips available' }, { status: 500 })
-        }
-
+        // Return the 3 signal metadata (No direct words, just IDs and labels)
         return NextResponse.json({
-            clips: audioClips.map(c => ({
-                id: c.id,
-                audio_url: c.audio_url,
-                morse_code: c.morse_code,
-                number: c.sort_order,
+            signals: ROUND5_SIGNALS.map(s => ({
+                id: s.id,
+                label: s.label,
+                // The actual word is hidden here, the frontend will use the ID to generate audio
             })),
-            instructions: 'Decode all 12 Morse code audio clips. One of the decoded words is the final key. Submit it below.',
-            hint: 'Each clip represents a single word. Decode carefully — only one is the correct key.',
+            instructions: 'Intercept and decode the 3 radio signals. One of them is the final system bypass key. Good luck.',
+            hint: 'Each signal is a separate Morse code transmission. Only ONE is the correct key.',
         })
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

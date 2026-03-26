@@ -367,7 +367,7 @@ export default function Round5Client() {
                                     </div>
                                     
                                     <div className="grid grid-cols-5 sm:grid-cols-7 gap-2">
-                                        {Object.entries(MORSE_MAP).filter(([k]) => k !== ' ').slice(0, 26).map(([char, code]) => (
+                                        {Object.entries(MORSE_MAP).filter(([k]) => k !== ' ').map(([char, code]) => (
                                             <div key={char} className="flex flex-col items-center p-1.5 bg-black/40 rounded border border-white/5">
                                                 <span className="text-xs font-black text-white">{char}</span>
                                                 <span className="text-[8px] font-mono text-green-500/70 tracking-tight">{code}</span>

@@ -17,9 +17,17 @@ export async function canAccessRound(teamId: string, round: number): Promise<boo
     if (!team.start_time || team.status === 'registered') return false
     if (team.status === 'disqualified') return false
 
-    // current_round tracks highest COMPLETED round
-    // To access round N, must have completed round N-1
-    return team.current_round >= round - 1
+    // To access Round N, must have completed Round N-1 in the progress table
+    const { data: progress } = await admin
+        .from('progress')
+        .select('*')
+        .eq('team_id', teamId)
+        .single()
+    
+    if (!progress) return false
+
+    const prevRoundField = `round${round - 1}_completed` as keyof typeof progress
+    return !!progress[prevRoundField]
 }
 
 // ── Mark a round as completed and unlock next ────────────────────────────────

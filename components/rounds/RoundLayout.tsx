@@ -26,11 +26,11 @@ export default function RoundLayout({
     return (
         <div className={`min-h-screen transition-colors duration-700 ${theme ? `theme-${theme}` : 'ambient-bg'}`}>
             {/* Round Header */}
-            <header className="border-b border-border/50 glass sticky top-0 z-40">
-                <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <header className="border-b border-border/50 glass sticky top-0 z-[100]">
+                <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
                     <Link
                         href="/dashboard"
-                        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        className="relative z-[110] flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-primary transition-colors cursor-pointer"
                     >
                         <ArrowLeft size={16} /> Dashboard
                     </Link>
@@ -63,7 +63,7 @@ export default function RoundLayout({
             </header>
 
             {/* Main Content */}
-            <main className="max-w-5xl mx-auto px-4 py-8">
+            <main className="max-w-6xl mx-auto px-4 py-8">
                 {children}
             </main>
         </div>

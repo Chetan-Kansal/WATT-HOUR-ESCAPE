@@ -32,10 +32,11 @@ export default async function DashboardPage() {
         { number: 10, title: "Smart-Grid Stabilizer", completed: progress?.round10_completed ?? false },
     ]
 
-    const currentRound = team.current_round
+    const completedRoundsCount = rounds.filter(r => r.completed).length
+    const currentRound = Math.min(completedRoundsCount, 9) // 0-indexed, max index is 9 (Round 10)
     const isEventStarted = !!team.start_time
     const isCompleted = team.status === 'completed'
-    const nextRound = isCompleted ? null : Math.min(currentRound + 1, 10)
+    const nextRound = isCompleted ? null : Math.min(completedRoundsCount + 1, 10)
 
     return (
         <DashboardAnimateWrapper>

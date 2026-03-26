@@ -131,7 +131,7 @@ export default function Round6Client({}: Round6ClientProps) {
     }
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 select-none">
+        <div className="max-w-6xl mx-auto space-y-8 pb-20">
             {/* Top Deck: Mission Status */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <motion.div 
@@ -221,13 +221,13 @@ export default function Round6Client({}: Round6ClientProps) {
             </div>
 
             {/* Circuit Area: The Interactive Grid */}
-            <div className="relative glass-card rounded-3xl p-8 md:p-16 border border-white/10 bg-black/60 min-h-[500px] flex items-center justify-center overflow-x-auto">
+            <div className="relative glass-card rounded-3xl border border-white/10 bg-black/60 min-h-[500px] flex items-center justify-start lg:justify-center overflow-x-auto overflow-y-hidden">
                 <div className="absolute inset-0 opacity-[0.05] pointer-events-none overflow-hidden" style={{ 
                     backgroundImage: 'radial-gradient(circle at 2px 2px, #22d3ee 1px, transparent 0)', 
                     backgroundSize: '40px 40px' 
                 }} />
 
-                <div className="flex items-center gap-0 relative z-10">
+                <div className="flex items-center gap-0 min-w-max h-full pl-32 pr-20 py-12 relative z-10">
                     {/* IN_0 */}
                     <div className="relative group">
                         <div className={`w-14 h-14 rounded-xl border-2 flex items-center justify-center font-mono font-black text-2xl transition-all duration-500
@@ -241,7 +241,7 @@ export default function Round6Client({}: Round6ClientProps) {
                     {gates.map((gate, idx) => (
                         <div key={idx} className="flex items-center gap-0">
                             {/* Trace Line */}
-                            <div className="relative w-12 md:w-20 lg:w-28 h-[2px]">
+                            <div className="relative w-16 md:w-24 lg:w-32 h-[2px]">
                                 <div className="absolute inset-0 bg-white/10" />
                                 <motion.div 
                                     className={`absolute inset-0 ${isSuccess ? (intermediateStates[idx] === 1 ? 'bg-cyan-500 shadow-[0_0_15px_#22d3ee]' : 'bg-transparent') : 'bg-white/5'}`}

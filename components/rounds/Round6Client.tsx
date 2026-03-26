@@ -88,6 +88,11 @@ export default function Round6Client({}: Round6ClientProps) {
     }
 
     const handleSubmit = async () => {
+        if (isSuccess) {
+            window.location.href = '/dashboard'
+            return
+        }
+
         if (currentOutput !== targetOutput) {
             toast.error("Logic Error: Output mismatch in current grid topology.")
             return
@@ -117,8 +122,7 @@ export default function Round6Client({}: Round6ClientProps) {
                 setIsSuccess(true)
                 toast.success("Grid Secure. Handshaking Complete.")
                 setTimeout(() => {
-                    router.push('/dashboard')
-                    router.refresh()
+                    window.location.href = '/dashboard'
                 }, 2000)
             } else {
                 toast.error(data.error || "Uplink rejected.")
@@ -221,7 +225,7 @@ export default function Round6Client({}: Round6ClientProps) {
             </div>
 
             {/* Circuit Area: The Interactive Grid */}
-            <div className="relative glass-card rounded-3xl border border-white/10 bg-black/60 min-h-[500px] flex items-center justify-start lg:justify-center overflow-x-auto overflow-y-hidden">
+            <div className="relative glass-card rounded-3xl border border-white/10 bg-black/60 min-h-[500px] flex items-center justify-start overflow-x-auto overflow-y-hidden">
                 <div className="absolute inset-0 opacity-[0.05] pointer-events-none overflow-hidden" style={{ 
                     backgroundImage: 'radial-gradient(circle at 2px 2px, #22d3ee 1px, transparent 0)', 
                     backgroundSize: '40px 40px' 
@@ -360,7 +364,7 @@ export default function Round6Client({}: Round6ClientProps) {
                         whileHover={{ scale: 1.02, boxShadow: '0 0 30px rgba(34, 211, 238, 0.4)' }}
                         whileTap={{ scale: 0.98 }}
                         onClick={handleSubmit}
-                        disabled={submitting || isSuccess}
+                        disabled={submitting}
                         className={`px-12 py-5 rounded-2xl font-black uppercase tracking-[0.3em] transition-all flex items-center gap-4 text-sm relative overflow-hidden group/btn
                             ${isSuccess 
                                 ? 'bg-green-500 text-black' 

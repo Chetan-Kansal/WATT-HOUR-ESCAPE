@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import { ArrowLeft, Timer } from 'lucide-react'
 import MiniTimer from '@/components/rounds/MiniTimer'
@@ -26,11 +28,15 @@ export default function RoundLayout({
     return (
         <div className={`min-h-screen transition-colors duration-700 ${theme ? `theme-${theme}` : 'ambient-bg'}`}>
             {/* Round Header */}
-            <header className="border-b border-border/50 glass sticky top-0 z-[100]">
+            <header className="border-b border-border/50 glass sticky top-0 z-[500]">
                 <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
                     <Link
                         href="/dashboard"
-                        className="relative z-[110] flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            window.location.href = '/dashboard';
+                        }}
+                        className="relative z-[510] flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-primary transition-colors cursor-pointer pointer-events-auto"
                     >
                         <ArrowLeft size={16} /> Dashboard
                     </Link>

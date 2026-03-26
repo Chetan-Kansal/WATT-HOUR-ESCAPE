@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseAdmin, createSupabaseServerClient } from '@/lib/supabase/server'
 import { Round2SubmitSchema } from '@/lib/validation/schemas'
 import { ROUND2_PROBLEMS } from '@/lib/round2/constants'
+import { completeRound } from '@/lib/roundLogic'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
         await admin.from('progress').update(updateData as never).eq('team_id', user.id)
 
         if (isRoundComplete) {
-            await admin.from('teams').update({ current_round: 3 } as never).eq('id', user.id)
+            await completeRound(user.id, 2)
         }
 
         return NextResponse.json({

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { Loader2, CheckCircle2, Zap, BookOpen, Cpu, Battery, Lightbulb, Activity, Gauge } from 'lucide-react'
+import { Loader2, CheckCircle2, Zap, BookOpen, Cpu, Battery, Lightbulb, Activity, Gauge, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import GridConnect from './Round3GridConnect'
 
@@ -102,34 +102,53 @@ export default function Round3Client() {
             <AnimatePresence>
                 {explanation && (
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-                        className="glass-card rounded-xl p-8 border border-green-500/50 bg-green-950/20 relative overflow-hidden"
+                        initial={{ opacity: 0, scale: 0.9, y: 40 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        className="glass-card rounded-[2.5rem] p-10 border-4 border-green-500/50 bg-[#051005] relative overflow-hidden shadow-[0_0_100px_rgba(34,197,94,0.3)]"
                     >
-                        {/* Schematic success lines */}
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.6)]" />
+                        {/* Victory background glow */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 via-transparent to-green-500/5" />
                         
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-                                <CheckCircle2 size={24} className="text-green-400" />
+                        <div className="relative z-10 text-center">
+                            <motion.div 
+                                initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.2 }}
+                                className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-500/40 shadow-[0_0_40px_rgba(34,197,94,0.4)]"
+                            >
+                                <CheckCircle2 size={48} className="text-green-400" />
+                            </motion.div>
+                            
+                            <h2 className="text-5xl font-black text-white mb-2 tracking-tighter italic uppercase">Congratulations!</h2>
+                            <p className="text-green-400 font-mono text-sm tracking-[0.4em] mb-10 uppercase font-black animate-pulse">Phase Lock Verified // Sector Secure</p>
+                            
+                            <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-left mb-10 backdrop-blur-sm">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <BookOpen size={16} className="text-green-400" />
+                                    <span className="text-[10px] font-mono text-green-500/70 uppercase tracking-widest">Post-Mission_Brief</span>
+                                </div>
+                                <p className="text-sm text-green-50/90 leading-relaxed font-sans tracking-wide italic">
+                                    "{explanation}"
+                                </p>
                             </div>
-                            <div>
-                                <h3 className="font-mono font-black text-green-400 uppercase tracking-widest text-lg italic">Phase Lock Achieved</h3>
-                                <p className="text-[10px] font-mono text-green-500/60 uppercase tracking-wider">Topology Integrity: 100%</p>
+
+                            <div className="flex flex-col items-center gap-6">
+                                <button 
+                                    onClick={() => router.push('/dashboard')}
+                                    className="group relative px-10 py-4 bg-green-500 text-black font-black font-mono rounded-xl hover:bg-green-400 transition-all hover:scale-105 hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] flex items-center gap-3 uppercase tracking-tighter"
+                                >
+                                    Return to Command Center
+                                    <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+                                </button>
+                                
+                                <div className="flex items-center gap-3">
+                                    <div className="h-1 w-12 bg-green-500/30 rounded-full overflow-hidden">
+                                        <motion.div 
+                                            initial={{ x: "-100%" }} animate={{ x: "0%" }} transition={{ duration: 4, ease: "linear" }}
+                                            className="h-full bg-green-500" 
+                                        />
+                                    </div>
+                                    <span className="text-[9px] font-mono text-green-500/40 uppercase tracking-[0.2em]">Auto-redirect in 4s</span>
+                                </div>
                             </div>
-                        </div>
-                        
-                        <div className="flex items-start gap-4 p-5 bg-white/5 rounded-lg border border-white/5">
-                            <BookOpen size={20} className="text-green-400/50 mt-1 flex-shrink-0" />
-                            <p className="text-sm text-green-50/90 leading-relaxed font-sans tracking-wide">
-                                {explanation}
-                            </p>
-                        </div>
-                        
-                        <div className="mt-8 flex items-center justify-between">
-                            <div className="flex gap-1">
-                                {[1,2,3].map(i => <div key={i} className="w-4 h-1 bg-green-500/30 rounded-full" />)}
-                            </div>
-                            <span className="text-[10px] font-mono text-green-400/50 uppercase tracking-[0.3em] animate-pulse">Routing to Command Dashboard...</span>
                         </div>
                     </motion.div>
                 )}

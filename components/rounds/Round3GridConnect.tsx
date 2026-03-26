@@ -168,7 +168,7 @@ export default function Round3GridConnect({ onSuccess }: { onSuccess: () => void
       const renewables = updatedGrid.filter(t => t.type === 'renewable')
       const allRenewablesPowered = renewables.every(r => r.isPowered)
       
-      if (target?.isPowered && (levelIdx < 2 || allRenewablesPowered)) {
+      if (target?.isPowered) {
         setSolved(true)
         handleNextLevel()
       }
@@ -270,11 +270,7 @@ export default function Round3GridConnect({ onSuccess }: { onSuccess: () => void
             <h4 className="text-[10px] font-mono text-amber-500 uppercase tracking-widest mb-2 font-black">Topology Guide</h4>
             <p className="text-[9px] font-mono text-amber-100/70 leading-relaxed uppercase">
                 Phase {currentLevel.phase}: 
-                {levelIdx < 2 
-                  ? " Route the flow to the Node_Farm." 
-                  : " Critical: Power all Renewable_Nodes + Route to Node_Farm."
-                }
-                Complete all 3 sectors to secure the handshake.
+                Route the flow to the Node_Farm to secure the handshake.
             </p>
         </div>
         <div className="basis-1/3 flex flex-col gap-2">
